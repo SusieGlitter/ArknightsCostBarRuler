@@ -1,5 +1,3 @@
-# ark_timeline_tool/app.py
-
 import tkinter as tk
 from tkinter import ttk, simpledialog, TclError
 import ttkbootstrap as ttkb
@@ -76,6 +74,7 @@ class TimelineApp:
         logger.info(f"TimelineApp {config.VERSION} 初始化完成。")
 
     def _configure_root_window(self):
+        """配置根窗口的基本属性。"""
         self.root.title(f"明日方舟打轴/对轴器 {config.VERSION}")
         self.root.geometry(f"{config.WINDOW_WIDTH}x{config.WINDOW_HEIGHT}+100+100")
         self.root.overrideredirect(True)
@@ -83,6 +82,7 @@ class TimelineApp:
         self.root.wm_attributes("-alpha", config.DEFAULT_ALPHA)
 
     def _load_icons(self):
+        """加载所有需要的图标文件。"""
         icon_files = {"open": "open.png", "save": "save.png", "magnet_on": "magnet_on.png",
                       "magnet_off": "magnet_off.png", "add": "add.png", "remove": "remove.png", "color": "color.png",
                       "sound_on": "sound_on.png", "sound_off": "sound_off.png", "visual_on": "visual_on.png",
@@ -97,18 +97,20 @@ class TimelineApp:
                 logger.error(f"图标文件未找到: {path}")
 
     def _setup_styles(self):
+        """设置应用程序的ttkbootstrap样式。"""
         style = ttkb.Style.get_instance()
         style.configure("TFrame", background="#282c34")
         style.configure("TLabel", background="#282c34", foreground="#abb2bf")
         style.configure("Tool.TButton", background="#282c34", borderwidth=0, focuscolor="#282c34", padding=0)
         style.map("Tool.TButton", background=[("active", "#3e4451")])
-        style.configure("Info.TLabel", font=("Segoe UI", 12))
+        style.configure("Info.TLabel", font=("Segoe UI", -18))
         style.configure("Now.Info.TLabel", foreground="cyan")
 
     def _setup_ui(self):
+        """创建应用程序的主要用户界面。"""
         main_frame = ttk.Frame(self.root, style="TFrame")
         main_frame.pack(expand=True, fill=BOTH)
-        self.ops_frame = ttk.Frame(main_frame, width=config.WINDOW_WIDTH // 3, style="TFrame")  # Fixed 1/3 width
+        self.ops_frame = ttk.Frame(main_frame, width=config.WINDOW_WIDTH // 3, style="TFrame")
         self.ops_frame.pack(side=LEFT, fill=Y, padx=5, pady=5)
         self.ops_frame.pack_propagate(False)
         self.dynamic_ops_frame = ttk.Frame(self.ops_frame, style="TFrame")
@@ -124,14 +126,14 @@ class TimelineApp:
         info_frame = ttk.Frame(display_frame, style="TFrame")
         info_frame.place(relx=0, rely=2 / 3, relwidth=1.0, relheight=1 / 3)
         self.info_time_label = ttk.Label(info_frame, text="00:00:00", style="Info.TLabel",
-                                         font=("Segoe UI", 12, "bold"))
+                                         font=("Segoe UI", -36, "bold"))
         self.info_time_label.pack(side=LEFT, padx=(10, 0))
         self.info_diamond_label = ttk.Label(info_frame, text="", style="Info.TLabel")
         self.info_diamond_label.pack(side=LEFT, padx=(5, 0))
         self.info_name_label = ttk.Label(info_frame, text="", style="Info.TLabel", cursor="hand2")
         self.info_name_label.pack(side=LEFT, padx=(0, 5))
-        self.info_name_label.bind("<Button-1>", self._on_node_name_click)  # BUGFIX: Use specific handler
-        self.info_name_label.bind("<B1-Motion>", self._on_window_drag_motion)  # Dragging still works
+        self.info_name_label.bind("<Button-1>", self._on_node_name_click)
+        self.info_name_label.bind("<B1-Motion>", self._on_window_drag_motion)
         self.info_remaining_label = ttk.Label(info_frame, text="", style="Info.TLabel")
         self.info_remaining_label.pack(side=LEFT, padx=5)
 
@@ -150,6 +152,7 @@ class TimelineApp:
                         style="Outline.Toolbutton").grid(row=0, column=1, sticky="ew", padx=1)
 
     def _process_ws_queue(self):
+        """处理来自WebSocket的消息队列并更新UI。"""
         try:
             while not self.ws_queue.empty():
                 data = self.ws_queue.get_nowait()
@@ -177,6 +180,7 @@ class TimelineApp:
             self.root.after(config.QUEUE_POLL_INTERVAL, self._process_ws_queue)
 
     def _update_ui_for_mode(self, *args):
+        """根据当前模式（打轴/对轴）更新UI。"""
         if self.is_flashing:
             self.is_flashing = False
 
@@ -191,6 +195,7 @@ class TimelineApp:
             self._create_following_buttons()
 
     def _create_grid_button(self, parent, r, c, text, icon_name, command):
+        """在网格布局中创建一个带图标和工具提示的按钮。"""
         icon = self.icons.get(icon_name)
         btn = ttk.Button(parent, command=command, style="Tool.TButton")
         if icon:
@@ -202,6 +207,7 @@ class TimelineApp:
         return btn
 
     def _create_grid_toggle_button(self, parent, r, c, text_on, text_off, var, on_icon, off_icon, command=None):
+        """创建一个切换按钮，其外观根据布尔变量的状态而改变。"""
         btn = ttk.Button(parent, style="Tool.TButton")
         tooltip = ToolTip(btn)
 
@@ -227,6 +233,7 @@ class TimelineApp:
         return btn
 
     def _create_editing_buttons(self):
+        """为“打轴模式”创建操作按钮。"""
         frame = self.dynamic_ops_frame
         self._create_grid_button(frame, 0, 0, "打开", "open", self._load_timeline)
         self._create_grid_button(frame, 0, 1, "保存", "save", self._save_timeline)
@@ -244,6 +251,7 @@ class TimelineApp:
                                         "magnet_off", command=on_magnet_toggle)
 
     def _create_following_buttons(self):
+        """为“对轴模式”创建操作按钮。"""
         frame = self.dynamic_ops_frame
         self._create_grid_button(frame, 0, 0, "打开", "open", self._load_timeline)
         self._create_grid_toggle_button(frame, 0, 1, "声音提醒: 开", "声音提醒: 关", self.sound_alert_enabled,
@@ -252,7 +260,7 @@ class TimelineApp:
                                         "visual_on", "visual_off")
         lead_frame = ttk.Frame(frame, style="TFrame")
         lead_frame.grid(row=1, column=0, columnspan=3, sticky="ew", pady=(15, 0))
-        ttk.Label(lead_frame, text="提醒提前(帧):", font=("Segoe UI", 8)).pack(side=LEFT, padx=5)
+        ttk.Label(lead_frame, text="提醒提前(帧):", font=("Segoe UI", -18)).pack(side=LEFT, padx=5)
         spinbox = ttk.Spinbox(
             lead_frame,
             from_=0,
@@ -264,6 +272,7 @@ class TimelineApp:
         spinbox.bind('<Return>', self._update_alert_lead)
 
     def _update_alert_lead(self, *args):
+        """更新提醒提前的帧数。"""
         try:
             frames_str = self.alert_lead_var.get()
             if frames_str:
@@ -277,14 +286,14 @@ class TimelineApp:
             pass
 
     def _draw_timeline_track(self, canvas, width, height):
-        """Draws the main background track for the timeline."""
+        """绘制时间轴的背景轨道。"""
         track_height = config.TIMELINE_TRACK_HEIGHT
         y0 = (height - track_height) / 2
         y1 = (height + track_height) / 2
         canvas.create_rectangle(0, y0, width, y1, fill=config.TIMELINE_TRACK_COLOR, outline="")
 
     def _draw_timeline_ticks(self, canvas, center_frame, width, height, pixels_per_frame):
-        """Draws the second and frame ticks on the timeline."""
+        """绘制时间轴上的刻度线和时间标签。"""
         frames_in_view = width / pixels_per_frame
         start_frame = int(center_frame - frames_in_view / 2)
         end_frame = int(center_frame + frames_in_view / 2)
@@ -294,23 +303,23 @@ class TimelineApp:
 
             x_pos = width / 2 + (frame - center_frame) * pixels_per_frame
 
-            if frame % config.FPS == 0:  # Major tick (every second)
+            if frame % config.FPS == 0:
                 y0 = height / 2 - config.TIMELINE_MAJOR_TICK_H
                 y1 = height / 2 + config.TIMELINE_MAJOR_TICK_H
                 canvas.create_line(x_pos, y0, x_pos, y1, fill=config.TIMELINE_TICK_COLOR, width=2)
 
-                # Add time text label
                 time_str = f"{frame // (config.FPS * 60):02d}:{(frame // config.FPS) % 60:02d}"
-                canvas.create_text(x_pos, y0 - 10, text=time_str, fill=config.TIMELINE_TICK_COLOR, font=("Segoe UI", 8),
+                canvas.create_text(x_pos, y0 - 10, text=time_str, fill=config.TIMELINE_TICK_COLOR,
+                                   font=("Segoe UI", -18),
                                    anchor="s")
 
-            elif frame % config.TIMELINE_SUBTICK_INTERVAL == 0:  # Minor tick
+            elif frame % config.TIMELINE_SUBTICK_INTERVAL == 0:
                 y0 = height / 2 - config.TIMELINE_MINOR_TICK_H
                 y1 = height / 2 + config.TIMELINE_MINOR_TICK_H
                 canvas.create_line(x_pos, y0, x_pos, y1, fill=config.TIMELINE_SUBTICK_COLOR, width=1)
 
     def _draw_nodes(self, canvas, center_frame, width, height, pixels_per_frame, node_on_cursor):
-        """Draws all timeline nodes."""
+        """在时间轴上绘制所有节点。"""
         for node in self.timeline_data:
             frame_diff = node["frame"] - center_frame
             x_pos = width / 2 + frame_diff * pixels_per_frame
@@ -326,31 +335,32 @@ class TimelineApp:
 
             canvas.create_polygon(points, fill=node["color"], outline=outline_color, width=outline_width,
                                   tags=f"node_{node['frame']}")
-            canvas.create_text(x_pos, height / 2 + (h + 10), text=node["name"], fill="white", font=("Segoe UI", 9),
+            canvas.create_text(x_pos, height / 2 + (h + 10), text=node["name"], fill="white", font=("Segoe UI", -18),
                                anchor="n")
 
     def _draw_playhead(self, canvas, center_frame, width, height, pixels_per_frame):
-        """Draws the game's current time indicator."""
+        """绘制游戏当前时间指示器。"""
         playhead_x = width / 2 + (self.current_game_frame - center_frame) * pixels_per_frame
         if not (0 <= playhead_x <= width): return
 
         canvas.create_line(playhead_x, 0, playhead_x, height, fill="#ff6347", width=2, dash=(4, 2))
-        # Draw playhead triangle
+        # 绘制播放头三角形
         ph = 8
         pw = 6
         canvas.create_polygon(playhead_x, ph, playhead_x - pw / 2, 0, playhead_x + pw / 2, 0, fill='#ff6347',
                               outline='')
 
     def _draw_center_cursor(self, canvas, width, height):
-        """Draws the timeline's center marker."""
+        """绘制时间轴的中心标记。"""
         center_x = width / 2
         canvas.create_line(center_x, 0, center_x, height, fill="#00FFFF", width=2)
-        # Add 'wings' for better visibility
+        # 添加“翅膀”以提高可见性
         wing_len = 8
         canvas.create_line(center_x - wing_len, 0, center_x + wing_len, 0, fill="#00FFFF", width=2)
         canvas.create_line(center_x - wing_len, height, center_x + wing_len, height, fill="#00FFFF", width=2)
 
     def _update_display(self):
+        """更新整个显示区域，包括时间轴和信息面板。"""
         canvas = self.timeline_canvas
         canvas.delete("all")
         width, height = canvas.winfo_width(), canvas.winfo_height()
@@ -405,11 +415,13 @@ class TimelineApp:
                 ToolTip(self.add_remove_btn, text=text)
 
     def _on_timeline_drag_start(self, event):
+        """处理时间轴拖动的开始事件。"""
         self.is_animating = False
         self.is_inertial_scrolling = False
         self._timeline_drag_data.update({"x": event.x, "start_x": event.x, "is_dragging": False, "last_dx": 0})
 
     def _on_timeline_drag_motion(self, event):
+        """处理时间轴的拖动事件。"""
         if not self._timeline_drag_data["is_dragging"] and abs(event.x - self._timeline_drag_data["start_x"]) > 5:
             self._timeline_drag_data["is_dragging"] = True
 
@@ -428,6 +440,7 @@ class TimelineApp:
         self._timeline_drag_data["x"] = event.x
 
     def _on_timeline_release(self, event):
+        """处理时间轴上的鼠标释放事件（拖动结束或单击）。"""
         was_dragging = self._timeline_drag_data["is_dragging"]
         self._timeline_drag_data["is_dragging"] = False
 
@@ -446,12 +459,14 @@ class TimelineApp:
                     self._animate_scroll_to(node_to_snap['frame'])
 
     def _animate_scroll_to(self, target_frame):
+        """平滑滚动到指定的目标帧。"""
         if self.is_animating: return
         self.is_inertial_scrolling = False
         self.is_animating = True
         self.animation_target_frame = int(target_frame)
 
     def _find_node_at(self, frame, tolerance=config.NODE_FIND_TOLERANCE):
+        """在指定帧附近查找节点。"""
         closest_node = None
         min_dist = float('inf')
         for node in self.timeline_data:
@@ -462,12 +477,15 @@ class TimelineApp:
         return closest_node
 
     def get_current_display_frame(self):
+        """获取当前时间轴中心应该显示的帧。"""
         return self.current_game_frame if self.magnet_mode.get() else int(round(self.timeline_offset))
 
     def _on_window_drag_start(self, event):
+        """处理窗口拖动的开始事件。"""
         self._window_drag_data = {"x": event.x, "y": event.y}
 
     def _on_window_drag_motion(self, event):
+        """处理窗口的拖动事件。"""
         dx = event.x - self._window_drag_data["x"]
         dy = event.y - self._window_drag_data["y"]
         x = self.root.winfo_x() + dx
@@ -475,18 +493,22 @@ class TimelineApp:
         self.root.geometry(f"+{x}+{y}")
 
     def _load_timeline(self):
+        """加载时间轴文件。"""
         loaded_data = load_timeline_from_file(self.root)
         if loaded_data is not None:
             self.timeline_data = loaded_data
 
     def _save_timeline(self):
+        """保存当前时间轴数据到文件。"""
         save_timeline_to_file(self.timeline_data, self.root)
 
     def _find_next_node(self, from_frame):
+        """从给定帧开始查找下一个节点。"""
         return next(
             (node for node in sorted(self.timeline_data, key=lambda x: x['frame']) if node['frame'] > from_frame), None)
 
     def _add_or_remove_node_at_cursor(self):
+        """在光标位置添加或移除节点。"""
         current_frame = self.get_current_display_frame()
         node_to_remove = self._find_node_at(current_frame, tolerance=config.NODE_FIND_TOLERANCE)
         if node_to_remove:
@@ -499,6 +521,7 @@ class TimelineApp:
             logger.info(f"添加了新节点在 {current_frame} 帧")
 
     def _rename_node_logic(self, node_to_rename):
+        """重命名指定节点的逻辑。"""
         if not node_to_rename: return
         new_name = simpledialog.askstring("重命名节点", "输入新名称:", initialvalue=node_to_rename.get('name', ''),
                                           parent=self.root)
@@ -507,11 +530,12 @@ class TimelineApp:
             node_to_rename['name'] = new_name.strip()
 
     def _rename_node_at_cursor(self):
+        """重命名光标位置的节点。"""
         self._rename_node_logic(
             self._find_node_at(self.get_current_display_frame(), tolerance=config.NODE_FIND_TOLERANCE))
 
     def _on_node_name_click(self, event):
-        """ Handles clicks on the info panel's node name label. """
+        """处理信息面板中节点名称标签的点击事件。"""
         if self.mode.get() == "打轴模式":
             node_on_cursor = self._find_node_at(self.get_current_display_frame(), tolerance=config.NODE_FIND_TOLERANCE)
             node_to_rename = node_on_cursor if node_on_cursor else self.current_next_node
@@ -521,6 +545,7 @@ class TimelineApp:
             self._on_window_drag_start(event)
 
     def _change_node_color_at_cursor(self):
+        """更改光标位置节点的颜色。"""
         node = self._find_node_at(self.get_current_display_frame(), tolerance=config.NODE_FIND_TOLERANCE)
         if node:
             try:
@@ -532,6 +557,7 @@ class TimelineApp:
             logger.debug(f"节点 '{node['name']}' 颜色已更改为 {node['color']}")
 
     def _handle_alerts(self, time_to_next, node_frame):
+        """处理声音和视觉提醒。"""
         if HAS_WINSOUND and self.sound_alert_enabled.get() and \
                 0 < time_to_next <= self.alert_lead_frames["sound"] and \
                 self.last_sound_alert_frame != node_frame:
@@ -547,6 +573,7 @@ class TimelineApp:
             self.is_flashing = False
 
     def _flash_loop(self):
+        """视觉提醒的闪烁循环。"""
         if not self.is_flashing:
             try:
                 style = ttkb.Style.get_instance()
