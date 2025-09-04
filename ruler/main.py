@@ -57,7 +57,7 @@ def analysis_worker(config: dict, ui_queue: queue.Queue, command_queue: queue.Qu
 
     previous_logical_frame = -1
     last_detection_time = time.time()
-    RESET_TIMEOUT = 3.0
+    RESET_TIMEOUT = 1.5
 
     try:
         worker_logger.info("正在创建截图控制器...")
