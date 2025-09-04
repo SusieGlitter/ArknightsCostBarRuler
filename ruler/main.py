@@ -176,14 +176,13 @@ def analysis_worker(config: dict, ui_queue: queue.Queue, command_queue: queue.Qu
 
                     frame_counter = 0
                     while True:
-                        # --- [核心修复] ---
                         try:
                             cmd = command_queue.get_nowait()
                             worker_logger.info(f"分析循环中收到新指令: {cmd}")
 
                             cmd_type = cmd.get("type")
                             # 定义不需要中断循环的“次要指令”
-                            MINOR_COMMANDS = ["toggle_lap_timer", "set_display_mode"]
+                            MINOR_COMMANDS = ["toggle_lap_timer", "set_display_mode", "adjust_timer", "reset_timer"]
 
                             if cmd_type in MINOR_COMMANDS:
                                 # 在循环内部处理次要指令
@@ -203,7 +202,20 @@ def analysis_worker(config: dict, ui_queue: queue.Queue, command_queue: queue.Qu
                                         save_config(config)
                                         ui_queue.put({"type": "mode_changed", "mode": new_mode})
 
-                                continue  # <-- 处理完次要指令后，继续内循环
+                                elif cmd_type == "adjust_timer":
+                                    adjustment = cmd.get("frames", 0)
+                                    timer_offset_frames += adjustment
+                                    # 更新 last_known_total_frames 以立即反映变化
+                                    last_known_total_frames += adjustment
+                                    worker_logger.info(f"计时器调整: {adjustment} 帧。新偏移量: {timer_offset_frames}")
+
+                                elif cmd_type == "reset_timer":
+                                    worker_logger.info("全局计时器已重置。")
+                                    timer_offset_frames, cycle_base_frames, cycle_counter = 0, 0, 0
+                                    last_known_total_frames = 0
+                                    lap_timer_active = False
+
+                                continue  # 处理完次要指令后，继续内循环
 
                             # 如果是其他“主要指令”，则放回队列并中断
                             worker_logger.info(f"指令 '{cmd_type}' 需要中断分析，正在退出循环。")
@@ -211,7 +223,6 @@ def analysis_worker(config: dict, ui_queue: queue.Queue, command_queue: queue.Qu
                             break
                         except queue.Empty:
                             pass
-                        # --- [结束修复] ---
 
                         frame = cap.capture_frame()
                         frame_counter += 1
@@ -258,7 +269,7 @@ def analysis_worker(config: dict, ui_queue: queue.Queue, command_queue: queue.Qu
 
                         ui_update_data = {"type": "update", "display_frame": display_frame_text,
                                           "display_total": display_total_text, "time_str": time_str,
-                                          "lap_frames": lap_frames_to_display}
+                                          "lap_frames": lap_frames_to_display, "totalFramesInCycle": total_f_active}
                         try:
                             ui_queue.put_nowait(ui_update_data)
                         except queue.Full:
@@ -311,7 +322,8 @@ def main():
             logger.debug("设置DPI感知成功 (shcore)。")
         except (AttributeError, OSError):
             try:
-                ctypes.windll.user32.SetProcessDPIAware(); logger.debug("设置DPI感知成功 (user32)。")
+                ctypes.windll.user32.SetProcessDPIAware();
+                logger.debug("设置DPI感知成功 (user32)。")
             except (AttributeError, OSError):
                 logger.warning("设置DPI感知失败。")
 
