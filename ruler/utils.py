@@ -39,16 +39,12 @@ def dump_image_with_roi(image: Image.Image, roi: tuple, prefix: str, info_text: 
     """
     global last_dump_time
 
-    # 检查1: 是否启用调试模式
     if not logger_setup.DEBUG_IMAGE_MODE or not logger_setup.IMG_DUMP_DIR:
         return
 
-    # === 关键修复: 添加图像转储节流阀 ===
     current_time = time.time()
     if current_time - last_dump_time < 1.0:
-        # 距离上次保存不足1秒，跳过本次保存
         return
-    # =================================
 
     try:
         # 创建图像副本以进行绘制，避免修改原始图像
@@ -75,7 +71,6 @@ def dump_image_with_roi(image: Image.Image, roi: tuple, prefix: str, info_text: 
         img_copy.save(filepath, quality=90)
         logger.debug(f"图像已转储: {filepath}")
 
-        # === 关键修复: 更新上次保存的时间戳 ===
         last_dump_time = current_time
 
     except Exception as e:
@@ -108,51 +103,103 @@ def find_cost_bar_roi(screen_width: int, screen_height: int) -> tuple[int, int, 
 
 
 def _get_raw_filled_pixel_width(
-    frame: Image.Image,
-    roi: tuple[int, int, int],
-    dump_prefix: Optional[str] = None
+        frame: Image.Image,
+        roi: tuple[int, int, int],
+        dump_prefix: Optional[str] = None
 ) -> Optional[int]:
     """
     从费用条ROI中提取填充部分的像素宽度。
+    优先检测正常亮度的费用条，如果未检测到，则回退到检测遮罩（变暗）模式的费用条。
     """
+    # 正常模式阈值
     WHITE_THRESHOLD = 250
+    # 遮罩模式阈值
+    MASKED_WHITE_THRESHOLD = 150
+    # 遮罩模式下整个ROI像素的亮度上限
+    MASKED_MAX_BRIGHTNESS = 165
+    # 通用常量
     GRAY_TOLERANCE = 20
     ALPHA_OPAQUE = 255
+
     def is_pixel_grayscale(r, g, b):
         return abs(r - g) <= GRAY_TOLERANCE and abs(g - b) <= GRAY_TOLERANCE
+
     x1, x2, y = roi
     total_width = x2 - x1
     if total_width <= 0:
         return None
+
     if frame.mode != 'RGBA':
         frame = frame.convert('RGBA')
+
+    # --- 快速ROI有效性检查 ---
     try:
         r_end, g_end, b_end, a_end = frame.getpixel((x2 - 1, y))
     except IndexError:
         logger.warning(f"ROI超出图像边界: roi={roi}, image_size={frame.size}")
         return None
+
     if a_end != ALPHA_OPAQUE or not is_pixel_grayscale(r_end, g_end, b_end):
         logger.debug("ROI区域无效: 末端像素不是不透明的灰度色。")
         return None
+
+    # --- 正常高亮度费用条检测 ---
+    filled_width = 0
     is_end_pixel_white = all(c > WHITE_THRESHOLD for c in (r_end, g_end, b_end))
     if is_end_pixel_white:
         filled_width = total_width
-        logger.debug(f"费用条已满 (末端像素为白色)，宽度: {filled_width}")
-        return filled_width
-    filled_width = 0
-    for x in range(x2 - 2, x1, -1):
-        r, g, b, a = frame.getpixel((x, y))
-        if a != ALPHA_OPAQUE or not is_pixel_grayscale(r, g, b):
-            logger.debug(f"ROI区域在扫描时发现无效像素 (x={x})，判定为非费用条。")
-            return None
-        is_current_pixel_white = all(c > WHITE_THRESHOLD for c in (r, g, b))
-        if is_current_pixel_white:
-            filled_width = x - x1 + 1
-            break
-    logger.debug(f"扫描完成，检测到填充宽度: {filled_width}")
+    else:
+        for x in range(x2 - 2, x1, -1):
+            r, g, b, a = frame.getpixel((x, y))
+            if a != ALPHA_OPAQUE or not is_pixel_grayscale(r, g, b):
+                logger.debug(f"ROI区域在扫描时发现无效像素 (x={x})，判定为非费用条。")
+                return None  # 如果条本身无效，则完全停止检测
+
+            is_current_pixel_white = all(c > WHITE_THRESHOLD for c in (r, g, b))
+            if is_current_pixel_white:
+                filled_width = x - x1 + 1
+                break
+
+    logger.debug(f"标准模式扫描完成，检测到填充宽度: {filled_width}")
+
+    # --- 回退到遮罩模式的费用条检测 ---
+    if filled_width == 0:
+        logger.debug("标准模式宽度为0，尝试回退到遮罩模式检测。")
+
+        # 如果末端像素过亮，则不可能是遮罩模式
+        if any(c > MASKED_MAX_BRIGHTNESS for c in (r_end, g_end, b_end)):
+            logger.debug(f"末端像素亮度过高({r_end, g_end, b_end})，不符合遮罩模式。最终宽度为0。")
+        else:
+            # 可能是遮罩模式，现在使用遮罩阈值进行判断
+            is_end_pixel_masked_white = all(c > MASKED_WHITE_THRESHOLD for c in (r_end, g_end, b_end))
+            if is_end_pixel_masked_white:
+                filled_width = total_width
+                logger.debug(f"遮罩模式费用条已满，宽度: {filled_width}")
+            else:
+                # 使用遮罩阈值重新扫描
+                for x in range(x2 - 2, x1, -1):
+                    r, g, b, a = frame.getpixel((x, y))
+
+                    # 在遮罩模式下，任何一个像素都不应过亮
+                    if a != ALPHA_OPAQUE or not is_pixel_grayscale(r, g, b) or any(
+                            c > MASKED_MAX_BRIGHTNESS for c in (r, g, b)):
+                        logger.debug(f"遮罩模式扫描时发现无效或过亮像素 (x={x})，遮罩模式判定失败。")
+                        filled_width = 0  # 使回退结果无效
+                        break
+
+                    is_current_pixel_masked_white = all(c > MASKED_WHITE_THRESHOLD for c in (r, g, b))
+                    if is_current_pixel_masked_white:
+                        filled_width = x - x1 + 1
+                        break  # 在遮罩模式下找到边缘
+
+            if filled_width > 0:
+                logger.debug(f"遮罩模式扫描成功，检测到填充宽度: {filled_width}")
+
+    # --- 最终日志记录与返回 ---
     if dump_prefix:
-        info = f"FilledWidth: {filled_width}"
+        info = f"Final FilledWidth: {filled_width}"
         dump_image_with_roi(frame, roi, dump_prefix, info)
+
     return filled_width
 
 

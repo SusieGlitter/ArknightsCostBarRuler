@@ -17,6 +17,7 @@ from calibration_manager import get_calibration_profiles, get_calibration_basena
 logger = logging.getLogger(__name__)
 
 VERSION = "v1.2"
+FRAMES_PER_SECOND = 30
 TRAY_SUPPORTED = False
 try:
     from pystray import MenuItem as item, Menu, Icon
@@ -45,6 +46,7 @@ class OverlayWindow:
         self.ui_queue = ui_queue
 
         self.current_display_mode = '0_to_n-1'
+        self.current_cycle_total_frames = 0
 
         self.screen_width = self.parent_root.winfo_screenwidth()
         self.screen_height = self.parent_root.winfo_screenheight()
@@ -135,7 +137,21 @@ class OverlayWindow:
         logger.debug("显示右键上下文菜单...")
         context_menu = tkMenu(self.root, tearoff=0)
 
-        profile_submenu = tkMenu(context_menu, tearoff=0)
+        context_menu.add_cascade(label="校准配置", menu=self._create_tkinter_profile_submenu(context_menu))
+        context_menu.add_cascade(label="帧数显示", menu=self._create_tkinter_display_mode_submenu(context_menu))
+        context_menu.add_cascade(label="调节计时器", menu=self._create_tkinter_timer_adjust_submenu(context_menu))
+
+        context_menu.add_separator()
+        context_menu.add_command(label=f'{VERSION} Z_06 作品', command=self._open_about_page)
+        context_menu.add_command(label="退出", command=self._schedule_quit)
+
+        try:
+            context_menu.tk_popup(event.x_root, event.y_root)
+        finally:
+            context_menu.grab_release()
+
+    def _create_tkinter_profile_submenu(self, parent_menu):
+        profile_submenu = tkMenu(parent_menu, tearoff=0)
         profiles = get_calibration_profiles()
         profile_submenu.add_command(label="-- 新建 --",
                                     command=lambda: self.master_callback({"type": "prepare_calibration"}))
@@ -153,27 +169,41 @@ class OverlayWindow:
 
             profile_submenu.add_cascade(label=display_name, menu=actions_submenu,
                                         foreground="blue" if is_active else "black")
+        return profile_submenu
 
-        context_menu.add_cascade(label="校准配置", menu=profile_submenu)
-
-        display_mode_submenu = tkMenu(context_menu, tearoff=0)
+    def _create_tkinter_display_mode_submenu(self, parent_menu):
+        display_mode_submenu = tkMenu(parent_menu, tearoff=0)
         modes = {"0_to_n-1": "0 / n-1", "0_to_n": "0 / n", "1_to_n": "1 / n"}
         tk_display_mode = tk.StringVar(value=self.current_display_mode)
         for key, text in modes.items():
             display_mode_submenu.add_radiobutton(label=text, variable=tk_display_mode, value=key,
                                                  command=lambda m=key: self.master_callback(
                                                      {"type": "set_display_mode", "mode": m}))
-        context_menu.add_cascade(label="帧数显示", menu=display_mode_submenu)
+        return display_mode_submenu
 
-        context_menu.add_separator()
-        context_menu.add_command(label=f'{VERSION} Z_06 作品', command=self._open_about_page)
-        context_menu.add_command(label="退出", command=self._schedule_quit)
+    def _create_tkinter_timer_adjust_submenu(self, parent_menu):
+        timer_adjust_submenu = tkMenu(parent_menu, tearoff=0)
+        is_running = self.active_profile_filename is not None
+        menu_state = "normal" if is_running else "disabled"
+        cycle_frames = self.current_cycle_total_frames
 
-        try:
-            context_menu.tk_popup(event.x_root, event.y_root)
-        finally:
-            context_menu.grab_release()
+        def adjust_cb(frames): self.master_callback({"type": "adjust_timer", "frames": frames})
 
+        def reset_cb(): self.master_callback({"type": "reset_timer"})
+
+        timer_adjust_submenu.add_command(label=f"< 回退 {cycle_frames} 帧", state=menu_state,
+                                         command=lambda: adjust_cb(-cycle_frames))
+        timer_adjust_submenu.add_command(label="< 回退 1 秒", state=menu_state,
+                                         command=lambda: adjust_cb(-FRAMES_PER_SECOND))
+        timer_adjust_submenu.add_separator()
+        timer_adjust_submenu.add_command(label="- 重置全局计时器", state=menu_state, command=reset_cb)
+        timer_adjust_submenu.add_separator()
+        timer_adjust_submenu.add_command(label="> 前进 1 秒", state=menu_state,
+                                         command=lambda: adjust_cb(FRAMES_PER_SECOND))
+        timer_adjust_submenu.add_command(label=f"> 前进 {cycle_frames} 帧", state=menu_state,
+                                         command=lambda: adjust_cb(cycle_frames))
+
+        return timer_adjust_submenu
 
     def _on_timer_click(self, event=None):
         logger.info("计时器标签被点击，发送 toggle_lap_timer 指令。")
@@ -302,6 +332,7 @@ class OverlayWindow:
                 self.update_running_display(message["display_frame"], message["display_total"])
                 if "time_str" in message: self.update_timer(message["time_str"])
                 if "lap_frames" in message: self.update_lap_timer(message["lap_frames"])
+                self.current_cycle_total_frames = message.get("totalFramesInCycle", 0)
             elif msg_type == "geometry":
                 self.setup_geometry(message["width"], message["height"])
             elif msg_type == "state_change":
@@ -388,7 +419,8 @@ class OverlayWindow:
             is_active = p["filename"] == self.active_profile_filename
             display_name = f"{'● ' if is_active else ''}{p['basename']} ({p['total_frames_str']})"
             profile_actions = Menu(
-                item('选用', lambda *args, f=p["filename"]: self.master_callback({"type": "use_profile", "filename": f}),
+                item('选用',
+                     lambda *args, f=p["filename"]: self.master_callback({"type": "use_profile", "filename": f}),
                      enabled=not is_active),
                 item('重命名', lambda *args, f=p["filename"]: self._rename_profile(f)),
                 item('删除', lambda *args, f=p["filename"]: self._delete_profile(f))
@@ -396,11 +428,30 @@ class OverlayWindow:
             calib_menu_items.append(item(display_name, profile_actions))
         return Menu(*calib_menu_items)
 
+    def _create_pystray_timer_adjust_submenu(self):
+        is_running = self.active_profile_filename is not None
+        cycle_frames = self.current_cycle_total_frames
+
+        def adjust_cb(frames): self.master_callback({"type": "adjust_timer", "frames": frames})
+
+        def reset_cb(): self.master_callback({"type": "reset_timer"})
+
+        return Menu(
+            item(f"< 回退 {cycle_frames} 帧", lambda: adjust_cb(-cycle_frames), enabled=is_running),
+            item("< 回退 1 秒", lambda: adjust_cb(-FRAMES_PER_SECOND), enabled=is_running),
+            Menu.SEPARATOR,
+            item("- 重置全局计时器", reset_cb, enabled=is_running),
+            Menu.SEPARATOR,
+            item("> 前进 1 秒", lambda: adjust_cb(FRAMES_PER_SECOND), enabled=is_running),
+            item(f"> 前进 {cycle_frames} 帧", lambda: adjust_cb(cycle_frames), enabled=is_running)
+        )
+
     def _update_tray_menu(self):
         if not TRAY_SUPPORTED or not self.tray_icon: return
         self.tray_icon.menu = Menu(
             item('校准配置', self._create_pystray_profile_submenu()),
             item('帧数显示', self._create_pystray_display_mode_submenu()),
+            item('调节计时器', self._create_pystray_timer_adjust_submenu()),
             Menu.SEPARATOR,
             item(f'{VERSION} Z_06 作品', self._open_about_page),
             item('退出', self._schedule_quit)
@@ -457,6 +508,7 @@ class OverlayWindow:
         self.pre_cal_label.config(text="右键托盘或窗口\n选择一个配置")
         self.pre_cal_label.place(relx=0.5, rely=0.5, anchor="center")
         self.active_profile_filename = None
+        self.current_cycle_total_frames = 0
         if TRAY_SUPPORTED: self._update_tray_menu()
 
     def set_state_pre_calibration(self):
@@ -467,6 +519,7 @@ class OverlayWindow:
         self.pre_cal_label.config(text="选中干员后\n点击左侧校准")
         self.pre_cal_label.place(relx=0.5, rely=0.5, anchor="center")
         self.active_profile_filename = None
+        self.current_cycle_total_frames = 0
         if TRAY_SUPPORTED: self._update_tray_menu()
 
     def set_state_calibrating(self):
