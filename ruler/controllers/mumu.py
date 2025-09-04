@@ -64,7 +64,11 @@ class MuMuPlayerController(BaseCaptureController):
             search_bases.append(initial_path.parent)
 
         relative_dll_paths = [
+            # MuMu模拟器12 5.0 预览版路径
+            Path("nx_device") / "12.0" / "shell" / "sdk" / "external_renderer_ipc.dll",
+            # MuMu模拟器12 5.0 标准版路径
             Path("nx_main") / "sdk" / "external_renderer_ipc.dll",
+            # 明日方舟专用MuMu模拟器12或更老版本路径
             Path("shell") / "sdk" / "external_renderer_ipc.dll",
         ]
 
