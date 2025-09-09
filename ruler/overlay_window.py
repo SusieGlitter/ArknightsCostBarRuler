@@ -16,7 +16,7 @@ from calibration_manager import get_calibration_profiles, get_calibration_basena
 
 logger = logging.getLogger(__name__)
 
-VERSION = "v1.2"
+VERSION = "v1.2.1"
 FRAMES_PER_SECOND = 30
 TRAY_SUPPORTED = False
 try:
