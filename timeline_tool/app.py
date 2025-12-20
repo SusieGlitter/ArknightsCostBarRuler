@@ -20,6 +20,7 @@ import config
 from utils import resource_path, format_frame_time
 from file_io import load_timeline_from_file, save_timeline_to_file
 from websocket_client import WebsocketClient
+from i18n import i18n
 
 logger = logging.getLogger(__name__)
 
@@ -35,7 +36,9 @@ class TimelineApp:
         self._configure_root_window()
 
         # --- 核心状态 ---
-        self.mode = tk.StringVar(value="打轴模式")
+        self.MODE_LOGGING = "mode.logging"
+        self.MODE_ALIGNMENT = "mode.alignment"
+        self.mode = tk.StringVar(value=self.MODE_LOGGING)
         self.timeline_data = []
         self.current_game_frame = 0
         self.timeline_offset = 0.0  # 使用浮点数以获得更平滑的拖动
@@ -114,7 +117,7 @@ class TimelineApp:
 
     def _configure_root_window(self):
         """配置根窗口的基本属性。"""
-        self.root.title(f"明日方舟打轴/对轴器 {config.VERSION}")
+        self.root.title(f"{i18n.get('app.title')} {config.VERSION}")
         self.root.geometry(f"{self.scaled_win_width}x{self.scaled_win_height}+100+100")
         self.root.overrideredirect(True)
         self.root.wm_attributes("-topmost", True)
@@ -184,14 +187,14 @@ class TimelineApp:
             widget.bind("<ButtonPress-1>", self._on_window_drag_start)
             widget.bind("<B1-Motion>", self._on_window_drag_motion)
 
-        quit_button = ttk.Button(self.ops_frame, text="退出", command=self.root.quit, style="Danger.TButton")
+        quit_button = ttk.Button(self.ops_frame, text=i18n.get("op.exit", "退出"), command=self.root.quit, style="Danger.TButton")
         quit_button.pack(side=BOTTOM, fill=X, pady=(0, self.scaled_pad_m))
         switch_frame = ttk.Frame(self.ops_frame, style="TFrame")
         switch_frame.pack(side=BOTTOM, fill=X, pady=self.scaled_pad_m)
         switch_frame.columnconfigure((0, 1), weight=1)
-        ttk.Radiobutton(switch_frame, text="打轴", variable=self.mode, value="打轴模式",
+        ttk.Radiobutton(switch_frame, text=i18n.get("mode.logging"), variable=self.mode, value=self.MODE_LOGGING,
                         style="Outline.Toolbutton").grid(row=0, column=0, sticky="ew", padx=self.scaled_pad_xs)
-        ttk.Radiobutton(switch_frame, text="对轴", variable=self.mode, value="对轴模式",
+        ttk.Radiobutton(switch_frame, text=i18n.get("mode.alignment"), variable=self.mode, value=self.MODE_ALIGNMENT,
                         style="Outline.Toolbutton").grid(row=0, column=1, sticky="ew", padx=self.scaled_pad_xs)
 
     def _process_ws_queue(self):
@@ -230,7 +233,7 @@ class TimelineApp:
         for widget in self.dynamic_ops_frame.winfo_children():
             widget.destroy()
         for i in range(4): self.dynamic_ops_frame.rowconfigure(i, weight=1)
-        if self.mode.get() == "打轴模式":
+        if self.mode.get() == self.MODE_LOGGING:
             self.magnet_mode.set(False)
             self._create_editing_buttons()
         else:
@@ -243,7 +246,7 @@ class TimelineApp:
         btn = ttk.Button(parent, command=command, style="Tool.TButton")
         if icon:
             btn.config(image=icon)
-            ToolTip(btn, text=text)
+            btn.tooltip = ToolTip(btn, text=text)
         else:
             btn.config(text=text)
         btn.grid(row=r, column=c, padx=self.scaled_pad_s, pady=self.scaled_pad_s, sticky="nsew")
@@ -278,32 +281,32 @@ class TimelineApp:
     def _create_editing_buttons(self):
         """为“打轴模式”创建操作按钮。"""
         frame = self.dynamic_ops_frame
-        self._create_grid_button(frame, 0, 0, "打开", "open", self._load_timeline)
-        self._create_grid_button(frame, 0, 1, "保存", "save", self._save_timeline)
-        self.add_remove_btn = self._create_grid_button(frame, 0, 2, "添加/移除", "add",
+        self._create_grid_button(frame, 0, 0, i18n.get("op.open"), "open", self._load_timeline)
+        self._create_grid_button(frame, 0, 1, i18n.get("op.save"), "save", self._save_timeline)
+        self.add_remove_btn = self._create_grid_button(frame, 0, 2, i18n.get("op.add"), "add",
                                                        self._add_or_remove_node_at_cursor)
-        self._create_grid_button(frame, 1, 0, "切换颜色", "color", self._change_node_color_at_cursor)
-        self._create_grid_button(frame, 1, 1, "重命名", "rename", self._rename_node_at_cursor)
+        self._create_grid_button(frame, 1, 0, i18n.get("op.color"), "color", self._change_node_color_at_cursor)
+        self._create_grid_button(frame, 1, 1, i18n.get("op.rename"), "rename", self._rename_node_at_cursor)
 
         def on_magnet_toggle():
             if not self.magnet_mode.get():
                 self.timeline_offset = self.current_game_frame
-                logger.debug(f"手动关闭磁铁模式，时间轴位置同步到: {self.timeline_offset}")
+                logger.debug(i18n.get("log.magnet_off.manual", frame=self.timeline_offset))
 
-        self._create_grid_toggle_button(frame, 1, 2, "磁铁: 开", "磁铁: 关", self.magnet_mode, "magnet_on",
+        self._create_grid_toggle_button(frame, 1, 2, i18n.get("op.magnet.on"), i18n.get("op.magnet.off"), self.magnet_mode, "magnet_on",
                                         "magnet_off", command=on_magnet_toggle)
 
     def _create_following_buttons(self):
         """为“对轴模式”创建操作按钮。"""
         frame = self.dynamic_ops_frame
-        self._create_grid_button(frame, 0, 0, "打开", "open", self._load_timeline)
-        self._create_grid_toggle_button(frame, 0, 1, "声音提醒: 开", "声音提醒: 关", self.sound_alert_enabled,
+        self._create_grid_button(frame, 0, 0, i18n.get("op.open"), "open", self._load_timeline)
+        self._create_grid_toggle_button(frame, 0, 1, i18n.get("op.sound.on"), i18n.get("op.sound.off"), self.sound_alert_enabled,
                                         "sound_on", "sound_off")
-        self._create_grid_toggle_button(frame, 0, 2, "视觉提醒: 开", "视觉提醒: 关", self.visual_alert_enabled,
+        self._create_grid_toggle_button(frame, 0, 2, i18n.get("op.visual.on"), i18n.get("op.visual.off"), self.visual_alert_enabled,
                                         "visual_on", "visual_off")
         lead_frame = ttk.Frame(frame, style="TFrame")
         lead_frame.grid(row=1, column=0, columnspan=3, sticky="ew", pady=(self.scaled_pad_xl, 0))
-        ttk.Label(lead_frame, text="提醒提前(帧):", font=(config.FONT_FAMILY, self.scaled_font_normal)).pack(side=LEFT, padx=self.scaled_pad_m)
+        ttk.Label(lead_frame, text=i18n.get("label.lead_frames"), font=(config.FONT_FAMILY, self.scaled_font_normal)).pack(side=LEFT, padx=self.scaled_pad_m)
         spinbox = ttk.Spinbox(
             lead_frame,
             from_=0,
@@ -431,16 +434,16 @@ class TimelineApp:
             self.info_name_label.config(
                 text=f" {node_to_display['name']}({format_frame_time(node_to_display['frame'])})")
             if node_to_display == node_on_cursor:
-                self.info_remaining_label.config(text=" 现在", style="Now.Info.TLabel")
+                self.info_remaining_label.config(text=i18n.get("info.now"), style="Now.Info.TLabel")
             else:
                 time_to_next = node_to_display['frame'] - center_frame
-                self.info_remaining_label.config(text=f" {time_to_next}帧后", style="Info.TLabel")
+                self.info_remaining_label.config(text=i18n.get("info.later", frames=int(time_to_next)), style="Info.TLabel")
         else:
             self.info_diamond_label.config(text="")
             self.info_name_label.config(text="")
             self.info_remaining_label.config(text="")
 
-        if self.mode.get() == "对轴模式":
+        if self.mode.get() == self.MODE_ALIGNMENT:
             if self.current_next_node:
                 time_to_alert = self.current_next_node['frame'] - center_frame
                 self._handle_alerts(time_to_alert, self.current_next_node['frame'])
@@ -449,13 +452,17 @@ class TimelineApp:
         else:
             self._handle_alerts(-1, -1)
 
-        if self.mode.get() == "打轴模式" and hasattr(self, 'add_remove_btn'):
+        if self.mode.get() == self.MODE_LOGGING and hasattr(self, 'add_remove_btn'):
             icon_name = "remove" if node_on_cursor else "add"
-            text = "移除节点" if node_on_cursor else "添加节点"
+            text = "op.remove" if node_on_cursor else "op.add" # Use key for dynamic text if possible or get valid string
+            text_str = i18n.get("op.remove") if node_on_cursor else i18n.get("op.add")
             icon = self.icons.get(icon_name)
             if icon:
                 self.add_remove_btn.config(image=icon)
-                ToolTip(self.add_remove_btn, text=text)
+                if hasattr(self.add_remove_btn, 'tooltip'):
+                    self.add_remove_btn.tooltip.text = text_str
+                else:
+                    self.add_remove_btn.tooltip = ToolTip(self.add_remove_btn, text=text_str)
 
     def _on_timeline_drag_start(self, event):
         """处理时间轴拖动的开始事件。"""
@@ -477,7 +484,7 @@ class TimelineApp:
 
         if self.magnet_mode.get():
             if abs(dx) > config.MAGNET_BREAK_THRESHOLD:
-                logger.info("通过大幅度拖拽已脱离磁铁模式。")
+                logger.info(i18n.get("log.magnet_off"))
                 self.magnet_mode.set(False)
                 self.timeline_offset = self.current_game_frame - frame_delta
         else:
@@ -501,7 +508,7 @@ class TimelineApp:
                 clicked_frame = int(self.timeline_offset + (event.x - width / 2) / pixels_per_frame)
                 node_to_snap = self._find_node_at(clicked_frame, tolerance=config.NODE_CLICK_TOLERANCE)
                 if node_to_snap:
-                    logger.info(f"单击吸附到节点: {node_to_snap['name']} ({node_to_snap['frame']})")
+                    logger.info(i18n.get("log.clicked", name=node_to_snap['name'], frame=node_to_snap['frame']))
                     self._animate_scroll_to(node_to_snap['frame'])
 
     def _animate_scroll_to(self, target_frame):
@@ -561,20 +568,20 @@ class TimelineApp:
         node_to_remove = self._find_node_at(current_frame, tolerance=config.NODE_FIND_TOLERANCE)
         if node_to_remove:
             self.timeline_data.remove(node_to_remove)
-            logger.info(f"移除了节点: {node_to_remove['name']}")
+            logger.info(i18n.get("log.removed", name=node_to_remove['name']))
         else:
-            new_node = {"frame": current_frame, "name": f"操作@{format_frame_time(current_frame)}",
+            new_node = {"frame": current_frame, "name": f"Node@{format_frame_time(current_frame)}",
                         "color": config.NODE_COLORS[0]}
             self.timeline_data.append(new_node)
-            logger.info(f"添加了新节点在 {current_frame} 帧")
+            logger.info(i18n.get("log.added", frame=current_frame))
 
     def _rename_node_logic(self, node_to_rename):
         """重命名指定节点的逻辑。"""
         if not node_to_rename: return
-        new_name = simpledialog.askstring("重命名节点", "输入新名称:", initialvalue=node_to_rename.get('name', ''),
+        new_name = simpledialog.askstring(i18n.get("dialog.rename.title"), i18n.get("dialog.rename.prompt"), initialvalue=node_to_rename.get('name', ''),
                                           parent=self.root)
         if new_name and new_name.strip():
-            logger.info(f"节点 '{node_to_rename['name']}' 重命名为 '{new_name.strip()}'")
+            logger.info(i18n.get("log.renamed", old=node_to_rename['name'], new=new_name.strip()))
             node_to_rename['name'] = new_name.strip()
 
     def _rename_node_at_cursor(self):
@@ -584,7 +591,7 @@ class TimelineApp:
 
     def _on_node_name_click(self, event):
         """处理信息面板中节点名称标签的点击事件。"""
-        if self.mode.get() == "打轴模式":
+        if self.mode.get() == self.MODE_LOGGING:
             node_on_cursor = self._find_node_at(self.get_current_display_frame(), tolerance=config.NODE_FIND_TOLERANCE)
             node_to_rename = node_on_cursor if node_on_cursor else self.current_next_node
             if node_to_rename:

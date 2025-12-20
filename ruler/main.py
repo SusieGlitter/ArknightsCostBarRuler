@@ -17,6 +17,7 @@ from overlay_window import OverlayWindow
 from utils import find_cost_bar_roi, get_logical_frame_from_calibration
 from api_server import start_server_in_thread
 from logger_setup import setup_logging
+from i18n import i18n
 
 logger = logging.getLogger(__name__)
 
@@ -357,10 +358,12 @@ def main():
 
     config = load_config()
     if not config:
-        logger.info("未找到配置文件，启动首次设置向导...")
+        # Initial language detection for wizard
+        i18n.load_locale(i18n.auto_detect_language())
+        logger.info(i18n.get("config_file_not_found", "Config file not found, starting setup wizard..."))
         config = create_config_with_gui(root)
         if not config:
-            logger.info("配置未完成，程序退出。");
+            logger.info(i18n.get("config_incomplete_exit", "Configuration incomplete, exiting."))
             root.destroy();
             return
 

@@ -13,10 +13,11 @@ from typing import Optional, Callable
 
 from utils import find_cost_bar_roi, resource_path
 from calibration_manager import get_calibration_profiles, get_calibration_basename
+from i18n import i18n
 
 logger = logging.getLogger(__name__)
 
-VERSION = "v1.2"
+VERSION = "v1.2.1"
 FRAMES_PER_SECOND = 30
 TRAY_SUPPORTED = False
 try:
@@ -39,7 +40,7 @@ except (ImportError, ModuleNotFoundError):
 
 class OverlayWindow:
     def __init__(self, master_callback: Callable, ui_queue: queue.Queue, parent_root: ttk.Window):
-        logger.info("初始化悬浮窗 (OverlayWindow)...")
+        logger.info(i18n.get("overlay.init", "Initializing OverlayWindow..."))
         self.parent_root = parent_root
         self.root: Optional[ttk.Toplevel] = None
         self.master_callback = master_callback
@@ -50,7 +51,7 @@ class OverlayWindow:
 
         self.screen_width = self.parent_root.winfo_screenwidth()
         self.screen_height = self.parent_root.winfo_screenheight()
-        logger.info(f"检测到主屏幕分辨率: {self.screen_width}x{self.screen_height}")
+        logger.info(i18n.get("overlay.screen_res", "Detected screen resolution: {width}x{height}", width=self.screen_width, height=self.screen_height))
 
         self.fonts = {}
         self.sizes = {}
@@ -137,13 +138,14 @@ class OverlayWindow:
         logger.debug("显示右键上下文菜单...")
         context_menu = tkMenu(self.root, tearoff=0)
 
-        context_menu.add_cascade(label="校准配置", menu=self._create_tkinter_profile_submenu(context_menu))
-        context_menu.add_cascade(label="帧数显示", menu=self._create_tkinter_display_mode_submenu(context_menu))
-        context_menu.add_cascade(label="调节计时器", menu=self._create_tkinter_timer_adjust_submenu(context_menu))
+        context_menu.add_cascade(label=i18n.get("overlay.menu.calibration"), menu=self._create_tkinter_profile_submenu(context_menu))
+        context_menu.add_cascade(label=i18n.get("overlay.menu.display"), menu=self._create_tkinter_display_mode_submenu(context_menu))
+        context_menu.add_cascade(label=i18n.get("overlay.menu.timer"), menu=self._create_tkinter_timer_adjust_submenu(context_menu))
 
         context_menu.add_separator()
-        context_menu.add_command(label=f'{VERSION} Z_06 作品', command=self._open_about_page)
-        context_menu.add_command(label="退出", command=self._schedule_quit)
+        context_menu.add_separator()
+        context_menu.add_command(label=i18n.get("overlay.menu.about", version=VERSION), command=self._open_about_page)
+        context_menu.add_command(label=i18n.get("overlay.menu.exit"), command=self._schedule_quit)
 
         try:
             context_menu.tk_popup(event.x_root, event.y_root)
@@ -153,7 +155,9 @@ class OverlayWindow:
     def _create_tkinter_profile_submenu(self, parent_menu):
         profile_submenu = tkMenu(parent_menu, tearoff=0)
         profiles = get_calibration_profiles()
-        profile_submenu.add_command(label="-- 新建 --",
+        profile_submenu = tkMenu(parent_menu, tearoff=0)
+        profiles = get_calibration_profiles()
+        profile_submenu.add_command(label=i18n.get("overlay.menu.new_profile"),
                                     command=lambda: self.master_callback({"type": "prepare_calibration"}))
         if profiles:
             profile_submenu.add_separator()
@@ -162,10 +166,10 @@ class OverlayWindow:
             display_name = f"{p['basename']} ({p['total_frames_str']})"
 
             actions_submenu = tkMenu(profile_submenu, tearoff=0)
-            actions_submenu.add_command(label="选用", command=lambda f=p["filename"]: self.master_callback(
+            actions_submenu.add_command(label=i18n.get("overlay.menu.select"), command=lambda f=p["filename"]: self.master_callback(
                 {"type": "use_profile", "filename": f}), state="disabled" if is_active else "normal")
-            actions_submenu.add_command(label="重命名", command=lambda f=p["filename"]: self._rename_profile(f))
-            actions_submenu.add_command(label="删除", command=lambda f=p["filename"]: self._delete_profile(f))
+            actions_submenu.add_command(label=i18n.get("overlay.menu.rename"), command=lambda f=p["filename"]: self._rename_profile(f))
+            actions_submenu.add_command(label=i18n.get("overlay.menu.delete"), command=lambda f=p["filename"]: self._delete_profile(f))
 
             profile_submenu.add_cascade(label=display_name, menu=actions_submenu,
                                         foreground="blue" if is_active else "black")
@@ -191,22 +195,22 @@ class OverlayWindow:
 
         def reset_cb(): self.master_callback({"type": "reset_timer"})
 
-        timer_adjust_submenu.add_command(label=f"< 回退 {cycle_frames} 帧", state=menu_state,
+        timer_adjust_submenu.add_command(label=i18n.get("overlay.timer.back_frames", frames=cycle_frames), state=menu_state,
                                          command=lambda: adjust_cb(-cycle_frames))
-        timer_adjust_submenu.add_command(label="< 回退 1 秒", state=menu_state,
+        timer_adjust_submenu.add_command(label=i18n.get("overlay.timer.back_1s"), state=menu_state,
                                          command=lambda: adjust_cb(-FRAMES_PER_SECOND))
         timer_adjust_submenu.add_separator()
-        timer_adjust_submenu.add_command(label="- 重置全局计时器", state=menu_state, command=reset_cb)
+        timer_adjust_submenu.add_command(label=i18n.get("overlay.timer.reset"), state=menu_state, command=reset_cb)
         timer_adjust_submenu.add_separator()
-        timer_adjust_submenu.add_command(label="> 前进 1 秒", state=menu_state,
+        timer_adjust_submenu.add_command(label=i18n.get("overlay.timer.fwd_1s"), state=menu_state,
                                          command=lambda: adjust_cb(FRAMES_PER_SECOND))
-        timer_adjust_submenu.add_command(label=f"> 前进 {cycle_frames} 帧", state=menu_state,
+        timer_adjust_submenu.add_command(label=i18n.get("overlay.timer.fwd_frames", frames=cycle_frames), state=menu_state,
                                          command=lambda: adjust_cb(cycle_frames))
 
         return timer_adjust_submenu
 
     def _on_timer_click(self, event=None):
-        logger.info("计时器标签被点击，发送 toggle_lap_timer 指令。")
+        logger.info(i18n.get("overlay.timer.click_log", "Timer label clicked, sending toggle_lap_timer command."))
         self.master_callback({"type": "toggle_lap_timer"})
 
     def _hide_all_dynamic_labels(self):
@@ -228,9 +232,14 @@ class OverlayWindow:
         win_height = int(win_width * 27 / 50)
         logger.debug(f"悬浮窗尺寸设置为: {win_width}x{win_height}")
 
+        # Adjust font size for English to prevent truncation
+        medium_scale = 0.22
+        if i18n.current_locale == "en_US":
+            medium_scale = 0.18
+
         self.fonts['large_bold'] = tkFont.Font(family="Segoe UI", size=-int(win_height * 0.55), weight="bold")
         self.fonts['large_normal'] = tkFont.Font(family="Segoe UI", size=-int(win_height * 0.55))
-        self.fonts['medium'] = tkFont.Font(family="Segoe UI", size=-int(win_height * 0.22))
+        self.fonts['medium'] = tkFont.Font(family="Segoe UI", size=-int(win_height * medium_scale))
         self.fonts['small'] = tkFont.Font(family="Segoe UI", size=-int(win_height * 0.18))
 
         self.sizes['offset_x'] = -int(win_width * 0.2)
@@ -413,17 +422,17 @@ class OverlayWindow:
 
     def _create_pystray_profile_submenu(self) -> Menu:
         profiles = get_calibration_profiles()
-        calib_menu_items = [item('-- 新建 --', lambda: self.master_callback({"type": "prepare_calibration"}))]
+        calib_menu_items = [item(i18n.get("overlay.menu.new_profile"), lambda: self.master_callback({"type": "prepare_calibration"}))]
         if profiles: calib_menu_items.append(Menu.SEPARATOR)
         for p in profiles:
             is_active = p["filename"] == self.active_profile_filename
             display_name = f"{'● ' if is_active else ''}{p['basename']} ({p['total_frames_str']})"
             profile_actions = Menu(
-                item('选用',
+                item(i18n.get("overlay.menu.select"),
                      lambda *args, f=p["filename"]: self.master_callback({"type": "use_profile", "filename": f}),
                      enabled=not is_active),
-                item('重命名', lambda *args, f=p["filename"]: self._rename_profile(f)),
-                item('删除', lambda *args, f=p["filename"]: self._delete_profile(f))
+                item(i18n.get("overlay.menu.rename"), lambda *args, f=p["filename"]: self._rename_profile(f)),
+                item(i18n.get("overlay.menu.delete"), lambda *args, f=p["filename"]: self._delete_profile(f))
             )
             calib_menu_items.append(item(display_name, profile_actions))
         return Menu(*calib_menu_items)
@@ -437,24 +446,24 @@ class OverlayWindow:
         def reset_cb(): self.master_callback({"type": "reset_timer"})
 
         return Menu(
-            item(f"< 回退 {cycle_frames} 帧", lambda: adjust_cb(-cycle_frames), enabled=is_running),
-            item("< 回退 1 秒", lambda: adjust_cb(-FRAMES_PER_SECOND), enabled=is_running),
+            item(i18n.get("overlay.timer.back_frames", frames=cycle_frames), lambda: adjust_cb(-cycle_frames), enabled=is_running),
+            item(i18n.get("overlay.timer.back_1s"), lambda: adjust_cb(-FRAMES_PER_SECOND), enabled=is_running),
             Menu.SEPARATOR,
-            item("- 重置全局计时器", reset_cb, enabled=is_running),
+            item(i18n.get("overlay.timer.reset"), reset_cb, enabled=is_running),
             Menu.SEPARATOR,
-            item("> 前进 1 秒", lambda: adjust_cb(FRAMES_PER_SECOND), enabled=is_running),
-            item(f"> 前进 {cycle_frames} 帧", lambda: adjust_cb(cycle_frames), enabled=is_running)
+            item(i18n.get("overlay.timer.fwd_1s"), lambda: adjust_cb(FRAMES_PER_SECOND), enabled=is_running),
+            item(i18n.get("overlay.timer.fwd_frames"), lambda: adjust_cb(cycle_frames), enabled=is_running)
         )
 
     def _update_tray_menu(self):
         if not TRAY_SUPPORTED or not self.tray_icon: return
         self.tray_icon.menu = Menu(
-            item('校准配置', self._create_pystray_profile_submenu()),
-            item('帧数显示', self._create_pystray_display_mode_submenu()),
-            item('调节计时器', self._create_pystray_timer_adjust_submenu()),
+            item(i18n.get("overlay.menu.calibration"), self._create_pystray_profile_submenu()),
+            item(i18n.get("overlay.menu.display"), self._create_pystray_display_mode_submenu()),
+            item(i18n.get("overlay.menu.timer"), self._create_pystray_timer_adjust_submenu()),
             Menu.SEPARATOR,
-            item(f'{VERSION} Z_06 作品', self._open_about_page),
-            item('退出', self._schedule_quit)
+            item(i18n.get("overlay.menu.about", version=VERSION), self._open_about_page),
+            item(i18n.get("overlay.menu.exit"), self._schedule_quit)
         )
         logger.debug("托盘菜单已更新。")
 
@@ -464,14 +473,14 @@ class OverlayWindow:
 
     def _show_rename_dialog(self, filename: str):
         old_basename = get_calibration_basename(filename)
-        new_basename = Querybox.get_string(prompt=f"为 '{old_basename}' 输入新名称:", title="重命名",
+        new_basename = Querybox.get_string(prompt=i18n.get("overlay.dialog.rename.prompt", old_basename=old_basename), title=i18n.get("overlay.dialog.rename.title"),
                                            initialvalue=old_basename, parent=self.root)
         if new_basename and new_basename.strip():
             logger.info(f"用户为 '{filename}' 输入新名称: '{new_basename.strip()}'，发送指令。")
             self.master_callback({"type": "rename_profile", "old": filename, "new_base": new_basename.strip()})
         elif new_basename is not None:
             logger.warning("用户输入了无效的空名称。")
-            Messagebox.show_warning("名称不能为空。", title="无效名称", parent=self.root)
+            Messagebox.show_warning(i18n.get("overlay.error.name_empty"), title=i18n.get("overlay.error.name_empty.title"), parent=self.root)
         else:
             logger.debug("用户取消了重命名操作。")
 
@@ -481,7 +490,7 @@ class OverlayWindow:
 
     def _show_delete_dialog(self, filename: str):
         basename = get_calibration_basename(filename)
-        result = Messagebox.yesno(message=f"确实要删除校准配置 '{basename}' 吗？", title="确认删除", parent=self.root)
+        result = Messagebox.yesno(message=i18n.get("overlay.dialog.delete.msg", basename=basename), title=i18n.get("overlay.dialog.delete.title"), parent=self.root)
         if result == "Yes" or "确认":
             logger.info(f"用户确认删除 '{filename}'，发送指令。")
             self.master_callback({"type": "delete_profile", "filename": filename})
@@ -505,7 +514,7 @@ class OverlayWindow:
         logger.info("UI状态切换: idle")
         self._hide_all_dynamic_labels()
         self.icon_button.config(image=self.icons.get('deco'), command=None)
-        self.pre_cal_label.config(text="右键托盘或窗口\n选择一个配置")
+        self.pre_cal_label.config(text=i18n.get("overlay.msg.idle"))
         self.pre_cal_label.place(relx=0.5, rely=0.5, anchor="center")
         self.active_profile_filename = None
         self.current_cycle_total_frames = 0
@@ -516,7 +525,7 @@ class OverlayWindow:
         self._hide_all_dynamic_labels()
         self.icon_button.config(image=self.icons.get('start'),
                                 command=lambda: self.master_callback({"type": "start_calibration"}))
-        self.pre_cal_label.config(text="选中干员后\n点击左侧校准")
+        self.pre_cal_label.config(text=i18n.get("overlay.msg.pre_cal"))
         self.pre_cal_label.place(relx=0.5, rely=0.5, anchor="center")
         self.active_profile_filename = None
         self.current_cycle_total_frames = 0

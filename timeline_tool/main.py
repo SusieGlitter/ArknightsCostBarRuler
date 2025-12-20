@@ -8,13 +8,17 @@ import utils
 
 utils.setup_logging()
 
+
+from i18n import i18n
 from app import TimelineApp
+
 
 
 def main():
     """程序主函数"""
     logger = logging.getLogger(__name__)
-    logger.info("应用程序启动...")
+    i18n.load_locale(i18n.auto_detect_language())
+    logger.info(f"应用程序启动... Lang: {i18n.current_locale}")
 
     try:
         ctypes.windll.shcore.SetProcessDpiAwareness(2)
