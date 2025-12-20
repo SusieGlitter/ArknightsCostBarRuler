@@ -67,7 +67,7 @@
 1.  克隆本仓库: `git clone https://github.com/ZeroAd-06/ArknightsCostBarRuler.git`
 2.  下载Minicap二进制文件: `https://github.com/openatx/stf-binaries/tree/master/node_modules/minicap-prebuilt/prebuilt` 并添加到目录 `controllers/minicap` 中。
 3.  安装Python 3.8+。
-4.  安装依赖: `pip install Pillow pystray ttkbootstrap websockets`
+4.  安装依赖: `pip install -r requirements.txt`
 5.  运行主程序: `python ruler/main.py`
 6.  运行打轴/对轴器: `python timeline_tool/main.py`
 
