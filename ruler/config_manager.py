@@ -6,6 +6,8 @@ import ttkbootstrap as ttk
 from ttkbootstrap.dialogs import Messagebox
 from typing import Dict, Any, Optional
 
+from i18n import i18n
+
 logger = logging.getLogger(__name__)
 
 CONFIG_FILE = "../config.json"
@@ -20,6 +22,14 @@ def load_config() -> Optional[Dict[str, Any]]:
             if config:
                 logger.info("配置加载成功。")
                 logger.debug(f"加载的配置内容: {config}")
+                
+                # Load language preference
+                lang = config.get('language')
+                if lang:
+                     i18n.load_locale(lang)
+                else:
+                     i18n.load_locale(i18n.auto_detect_language())
+
                 return config
             logger.warning(f"配置文件 '{CONFIG_FILE}' 为空。")
             return None
@@ -57,7 +67,7 @@ class ConfigWindow(ttk.Toplevel):
 
         self.config_data = None
         self.FONT_NORMAL = ("Microsoft YaHei UI", 10)
-        self.title("首次使用配置向导")
+        self.title(i18n.get("config.window.title"))
         self.grab_set()  # 模态窗口
 
         # --- 核心修改：使用字典管理模拟器选项 ---
@@ -69,7 +79,7 @@ class ConfigWindow(ttk.Toplevel):
         self.selected_display_name = ttk.StringVar(master=self)
 
         main_frame = ttk.Frame(self, padding="15 15 15 15")
-        main_frame.pack(expand=True, fill=ttk.BOTH)
+        main_frame.pack(expand=True, fill="both")
 
         self._create_widgets(main_frame)
         self._on_selection_change()  # 初始化显示正确的设置
@@ -95,16 +105,29 @@ class ConfigWindow(ttk.Toplevel):
         logger.debug("正在创建 ConfigWindow 的控件...")
         parent.columnconfigure(0, weight=1)
 
-        header_label = ttk.Label(parent, text="首次使用，请完成连接配置。", font=("Microsoft YaHei UI", 14, "bold"))
-        header_label.grid(row=0, column=0, pady=(0, 20), sticky="w")
+        # Language Selection
+        lang_frame = ttk.Frame(parent)
+        lang_frame.grid(row=0, column=0, pady=(0, 10), sticky="ew")
+        
+        lang_label = ttk.Label(lang_frame, text=i18n.get("config.language"), font=self.FONT_NORMAL)
+        lang_label.pack(side="left", padx=(0, 10))
+
+        self.language_var = ttk.StringVar(value=i18n.current_locale)
+        self.language_combo = ttk.Combobox(lang_frame, textvariable=self.language_var, 
+                                           values=["zh_CN", "en_US"], state="readonly", width=10)
+        self.language_combo.pack(side="left")
+        self.language_combo.bind("<<ComboboxSelected>>", self._on_language_change)
+
+        self.header_label = ttk.Label(parent, text=i18n.get("config.header"), font=("Microsoft YaHei UI", 14, "bold"))
+        self.header_label.grid(row=1, column=0, pady=(0, 20), sticky="w")
 
         # --- 核心修改：使用下拉框代替单选按钮 ---
-        type_frame = ttk.Labelframe(parent, text=" 模拟器类型 ")
-        type_frame.grid(row=1, column=0, sticky="ew", pady=10)
-        type_frame.columnconfigure(0, weight=1)
+        self.type_frame = ttk.Labelframe(parent, text=i18n.get("config.emulator_type"))
+        self.type_frame.grid(row=2, column=0, sticky="ew", pady=10)
+        self.type_frame.columnconfigure(0, weight=1)
 
         self.emulator_combobox = ttk.Combobox(
-            type_frame,
+            self.type_frame,
             textvariable=self.selected_display_name,
             values=list(self.EMULATOR_OPTIONS.keys()),
             state="readonly"
@@ -115,7 +138,7 @@ class ConfigWindow(ttk.Toplevel):
         # --- 修改结束 ---
 
         self.options_container = ttk.Frame(parent)
-        self.options_container.grid(row=2, column=0, sticky="ew", pady=5)
+        self.options_container.grid(row=3, column=0, sticky="ew", pady=5)
         self.options_container.columnconfigure(0, weight=1)
 
         # 创建所有可能的设置框架
@@ -128,60 +151,118 @@ class ConfigWindow(ttk.Toplevel):
         self.minicap_frame = self._create_minicap_frame(self.options_container)
         self.minicap_frame.grid(row=0, column=0, sticky="nsew")
 
-        save_button = ttk.Button(parent, text="保存并启动", command=self._save_and_close, bootstyle="success")
-        save_button.grid(row=3, column=0, pady=(20, 0), ipady=5, sticky="ew")
+        self.save_button = ttk.Button(parent, text=i18n.get("config.btn.save_start"), command=self._save_and_close, bootstyle="success")
+        self.save_button.grid(row=4, column=0, pady=(20, 0), ipady=5, sticky="ew")
         logger.debug("控件创建完成。")
 
     def _create_mumu_frame(self, parent) -> ttk.Frame:
-        frame = ttk.Labelframe(parent, text=" MuMu模拟器12 设置 ")
+        frame = ttk.Labelframe(parent, text=i18n.get("config.mumu.frame.title"))
         frame.columnconfigure(1, weight=1)
 
-        path_label = ttk.Label(frame, text="安装路径:", font=self.FONT_NORMAL)
-        path_label.grid(row=0, column=0, padx=(10, 5), pady=10, sticky="w")
+        self.mumu_path_label = ttk.Label(frame, text=i18n.get("config.label.path"), font=self.FONT_NORMAL)
+        self.mumu_path_label.grid(row=0, column=0, padx=(10, 5), pady=10, sticky="w")
         self.mumu_path_entry = ttk.Entry(frame, font=self.FONT_NORMAL)
         self.mumu_path_entry.grid(row=0, column=1, padx=5, pady=10, sticky="ew")
-        browse_button = ttk.Button(frame, text="浏览...", command=self._browse_mumu_path, bootstyle="secondary-outline")
-        browse_button.grid(row=0, column=2, padx=(5, 10), pady=10, sticky="e")
+        self.mumu_browse_btn = ttk.Button(frame, text=i18n.get("config.btn.browse"), command=self._browse_mumu_path, bootstyle="secondary-outline")
+        self.mumu_browse_btn.grid(row=0, column=2, padx=(5, 10), pady=10, sticky="e")
 
-        instance_label = ttk.Label(frame, text="实例索引:", font=self.FONT_NORMAL)
-        instance_label.grid(row=1, column=0, padx=(10, 5), pady=(0, 10), sticky="w")
+        self.mumu_instance_label = ttk.Label(frame, text=i18n.get("config.label.instance"), font=self.FONT_NORMAL)
+        self.mumu_instance_label.grid(row=1, column=0, padx=(10, 5), pady=(0, 10), sticky="w")
         self.mumu_instance_entry = ttk.Entry(frame, font=self.FONT_NORMAL)
         self.mumu_instance_entry.grid(row=1, column=1, padx=5, pady=(0, 10), sticky="ew", columnspan=2)
         self.mumu_instance_entry.insert(0, "0")
         return frame
 
     def _create_ldplayer_frame(self, parent) -> ttk.Frame:
-        frame = ttk.Labelframe(parent, text=" 雷电模拟器 设置 ")
+        frame = ttk.Labelframe(parent, text=i18n.get("config.ldplayer.frame.title"))
         frame.columnconfigure(1, weight=1)
 
-        path_label = ttk.Label(frame, text="安装路径:", font=self.FONT_NORMAL)
-        path_label.grid(row=0, column=0, padx=(10, 5), pady=10, sticky="w")
+        self.ld_path_label = ttk.Label(frame, text=i18n.get("config.label.path"), font=self.FONT_NORMAL)
+        self.ld_path_label.grid(row=0, column=0, padx=(10, 5), pady=10, sticky="w")
         self.ldplayer_path_entry = ttk.Entry(frame, font=self.FONT_NORMAL)
         self.ldplayer_path_entry.grid(row=0, column=1, padx=5, pady=10, sticky="ew")
-        browse_button = ttk.Button(frame, text="浏览...", command=self._browse_ldplayer_path,
+        self.ld_browse_btn = ttk.Button(frame, text=i18n.get("config.btn.browse"), command=self._browse_ldplayer_path,
                                    bootstyle="secondary-outline")
-        browse_button.grid(row=0, column=2, padx=(5, 10), pady=10, sticky="e")
+        self.ld_browse_btn.grid(row=0, column=2, padx=(5, 10), pady=10, sticky="e")
 
-        instance_label = ttk.Label(frame, text="实例索引:", font=self.FONT_NORMAL)
-        instance_label.grid(row=1, column=0, padx=(10, 5), pady=10, sticky="w")
+        self.ld_instance_label = ttk.Label(frame, text=i18n.get("config.label.instance"), font=self.FONT_NORMAL)
+        self.ld_instance_label.grid(row=1, column=0, padx=(10, 5), pady=10, sticky="w")
         self.ldplayer_instance_entry = ttk.Entry(frame, font=self.FONT_NORMAL)
         self.ldplayer_instance_entry.grid(row=1, column=1, padx=5, pady=10, sticky="ew", columnspan=2)
         self.ldplayer_instance_entry.insert(0, "0")
 
-        adb_label = ttk.Label(frame, text="ADB Device ID (可选):", font=self.FONT_NORMAL)
-        adb_label.grid(row=2, column=0, padx=(10, 5), pady=(0, 10), sticky="w")
+        self.ld_adb_label = ttk.Label(frame, text=i18n.get("config.label.adb_id_optional"), font=self.FONT_NORMAL)
+        self.ld_adb_label.grid(row=2, column=0, padx=(10, 5), pady=(0, 10), sticky="w")
         self.ldplayer_id_entry = ttk.Entry(frame, font=self.FONT_NORMAL)
         self.ldplayer_id_entry.grid(row=2, column=1, padx=5, pady=(0, 10), sticky="ew", columnspan=2)
         return frame
 
     def _create_minicap_frame(self, parent) -> ttk.Frame:
-        frame = ttk.Labelframe(parent, text=" 通用ADB 设置 ")
+        frame = ttk.Labelframe(parent, text=i18n.get("config.minicap.frame.title"))
         frame.columnconfigure(0, weight=1)
-        label = ttk.Label(frame, text="ADB Device ID (可选, 留空则自动检测):", font=self.FONT_NORMAL)
-        label.grid(row=0, column=0, padx=10, pady=(10, 5), sticky="w")
+        self.minicap_adb_label = ttk.Label(frame, text=i18n.get("config.label.adb_id_auto"), font=self.FONT_NORMAL)
+        self.minicap_adb_label.grid(row=0, column=0, padx=10, pady=(10, 5), sticky="w")
         self.minicap_id_entry = ttk.Entry(frame, font=self.FONT_NORMAL)
         self.minicap_id_entry.grid(row=1, column=0, padx=10, pady=(0, 10), sticky="ew")
         return frame
+
+    def _on_language_change(self, event=None):
+        """Handle language change"""
+        new_lang = self.language_var.get()
+        logger.info(f"Language changed to {new_lang}")
+        i18n.load_locale(new_lang)
+        self._refresh_ui_text()
+        
+    def _refresh_ui_text(self):
+        """Update strings in the UI when language changes"""
+        self.title(i18n.get("config.window.title"))
+        self.header_label.config(text=i18n.get("config.header"))
+        
+        # Emulator types
+        # Note: We need to update keys to map to values in localized EMULATOR_OPTIONS or just update the dropdown values
+        # Since logic relies on the display name to map back to key (mumu, etc), we must be careful.
+        # Ideally, we should separate display name from logic key.
+        # For now, let's just update the static texts and leave the combobox items alone or rebuild them.
+        # But wait, self.EMULATOR_OPTIONS keys are display names! This is bad design in original code but I must work with it.
+        # To fix this properly, I'd need to change how EMULATOR_OPTIONS works.
+        # Let's try to update display names.
+        
+        # Re-populate EMULATOR_OPTIONS with translated keys? No, ConfigWindow is short lived.
+        # Let's just update labels first.
+        
+        self.type_frame.config(text=i18n.get("config.emulator_type"))
+        self.save_button.config(text=i18n.get("config.btn.save_start"))
+        
+        self.mumu_frame.config(text=i18n.get("config.mumu.frame.title"))
+        self.mumu_path_label.config(text=i18n.get("config.label.path"))
+        self.mumu_browse_btn.config(text=i18n.get("config.btn.browse"))
+        self.mumu_instance_label.config(text=i18n.get("config.label.instance"))
+        
+        self.ldplayer_frame.config(text=i18n.get("config.ldplayer.frame.title"))
+        self.ld_path_label.config(text=i18n.get("config.label.path"))
+        self.ld_browse_btn.config(text=i18n.get("config.btn.browse"))
+        self.ld_instance_label.config(text=i18n.get("config.label.instance"))
+        self.ld_adb_label.config(text=i18n.get("config.label.adb_id_optional"))
+        
+        self.minicap_frame.config(text=i18n.get("config.minicap.frame.title"))
+        self.minicap_adb_label.config(text=i18n.get("config.label.adb_id_auto"))
+
+        # Refill emulator options with translated strings while keeping the mapping
+        # This is tricky because `self.selected_display_name` holds the current display name.
+        current_selection_key = self.EMULATOR_OPTIONS.get(self.selected_display_name.get())
+        
+        self.EMULATOR_OPTIONS = {
+            i18n.get("config.type.mumu"): "mumu",
+            i18n.get("config.type.ldplayer"): "ldplayer",
+            i18n.get("config.type.minicap"): "minicap"
+        }
+        self.emulator_combobox['values'] = list(self.EMULATOR_OPTIONS.keys())
+        
+        # Restore selection
+        for disp, key in self.EMULATOR_OPTIONS.items():
+            if key == current_selection_key:
+                self.emulator_combobox.set(disp)
+                break
 
     def _on_selection_change(self, event=None):
         display_name = self.selected_display_name.get()
@@ -197,20 +278,20 @@ class ConfigWindow(ttk.Toplevel):
 
     def _browse_mumu_path(self):
         logger.debug("打开 '浏览' 对话框以选择MuMu路径。")
-        path = filedialog.askdirectory(title="请选择MuMu模拟器12的安装根目录")
+        path = filedialog.askdirectory(title=i18n.get("config.browse.title.mumu"))
         if path:
             logger.info(f"用户选择了MuMu路径: {path}")
-            self.mumu_path_entry.delete(0, ttk.END)
+            self.mumu_path_entry.delete(0, "end")
             self.mumu_path_entry.insert(0, path)
         else:
             logger.debug("用户取消了路径选择。")
 
     def _browse_ldplayer_path(self):
         logger.debug("打开 '浏览' 对话框以选择雷电模拟器路径。")
-        path = filedialog.askdirectory(title="请选择雷电模拟器的安装根目录")
+        path = filedialog.askdirectory(title=i18n.get("config.browse.title.ldplayer"))
         if path:
             logger.info(f"用户选择了雷电模拟器路径: {path}")
-            self.ldplayer_path_entry.delete(0, ttk.END)
+            self.ldplayer_path_entry.delete(0, "end")
             self.ldplayer_path_entry.insert(0, path)
         else:
             logger.debug("用户取消了路径选择。")
@@ -226,7 +307,7 @@ class ConfigWindow(ttk.Toplevel):
             mumu_path = self.mumu_path_entry.get().strip()
             if not mumu_path:
                 logger.warning("保存失败：MuMu模拟器安装路径为空。")
-                Messagebox.show_error("MuMu模拟器安装路径不能为空！", title="错误", parent=self)
+                Messagebox.show_error(i18n.get("config.error.mumu_path_empty"), title=i18n.get("config.error.mumu_path_empty.title"), parent=self)
                 return
             self.config_data["install_path"] = mumu_path
 
@@ -242,7 +323,7 @@ class ConfigWindow(ttk.Toplevel):
             ld_path = self.ldplayer_path_entry.get().strip()
             if not ld_path:
                 logger.warning("保存失败：雷电模拟器安装路径为空。")
-                Messagebox.show_error("雷电模拟器安装路径不能为空！", title="错误", parent=self)
+                Messagebox.show_error(i18n.get("config.error.ld_path_empty"), title=i18n.get("config.error.ld_path_empty.title"), parent=self)
                 return
             self.config_data["install_path"] = ld_path
 
@@ -262,6 +343,8 @@ class ConfigWindow(ttk.Toplevel):
             minicap_id = self.minicap_id_entry.get().strip()
             if minicap_id:
                 self.config_data["device_id"] = minicap_id
+
+        self.config_data["language"] = self.language_var.get()
 
         logger.info(f"生成新配置: {self.config_data}")
         save_config(self.config_data)
