@@ -246,7 +246,7 @@ class TimelineApp:
         btn = ttk.Button(parent, command=command, style="Tool.TButton")
         if icon:
             btn.config(image=icon)
-            ToolTip(btn, text=text)
+            btn.tooltip = ToolTip(btn, text=text)
         else:
             btn.config(text=text)
         btn.grid(row=r, column=c, padx=self.scaled_pad_s, pady=self.scaled_pad_s, sticky="nsew")
@@ -459,7 +459,10 @@ class TimelineApp:
             icon = self.icons.get(icon_name)
             if icon:
                 self.add_remove_btn.config(image=icon)
-                ToolTip(self.add_remove_btn, text=text_str)
+                if hasattr(self.add_remove_btn, 'tooltip'):
+                    self.add_remove_btn.tooltip.text = text_str
+                else:
+                    self.add_remove_btn.tooltip = ToolTip(self.add_remove_btn, text=text_str)
 
     def _on_timeline_drag_start(self, event):
         """处理时间轴拖动的开始事件。"""
