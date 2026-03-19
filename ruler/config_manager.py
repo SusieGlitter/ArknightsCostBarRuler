@@ -85,6 +85,7 @@ class ConfigWindow(ttk.Toplevel):
         self.selected_display_name = ttk.StringVar(master=self)
         self.selected_window_handle = None
         self.selected_window_title = None
+        self.selected_window_class = None
         self.window_items = []
         self._window_preview_photo = None
         self.window_preview_after_id = None
@@ -186,7 +187,7 @@ class ConfigWindow(ttk.Toplevel):
         self.minicap_frame.grid(row=0, column=0, sticky="nsew")
 
         self.save_button = ttk.Button(parent, text=i18n.get("config.btn.save_start"), command=self._save_and_close, bootstyle="success")
-        self.save_button.grid(row=5, column=0, pady=(12, 0), ipady=5, sticky="ew")
+        self.save_button.grid(row=5, column=0, pady=(8, 0), ipady=5, sticky="ew")
         logger.debug("控件创建完成。")
 
     def _create_window_frame(self, parent) -> ttk.Frame:
@@ -204,12 +205,11 @@ class ConfigWindow(ttk.Toplevel):
         self.window_scan_status.grid(row=0, column=1, sticky="w", padx=(10, 0))
 
         list_frame = ttk.Frame(frame)
-        list_frame.grid(row=1, column=0, sticky="nsew", padx=10, pady=(0, 10))
-        list_frame.rowconfigure(0, weight=1)
+        list_frame.grid(row=1, column=0, sticky="ew", padx=10, pady=(0, 10))
         list_frame.columnconfigure(0, weight=1)
 
         self.window_listbox = tk.Listbox(list_frame, height=5, activestyle="dotbox")
-        self.window_listbox.grid(row=0, column=0, sticky="nsew")
+        self.window_listbox.grid(row=0, column=0, sticky="ew")
         self.window_listbox.bind("<<ListboxSelect>>", self._on_window_select)
 
         scroll = ttk.Scrollbar(list_frame, command=self.window_listbox.yview)
@@ -219,9 +219,9 @@ class ConfigWindow(ttk.Toplevel):
         self.window_selected_label = ttk.Label(frame, text=i18n.get("config.window.selected", "Selected: None"), font=self.FONT_NORMAL)
         self.window_selected_label.grid(row=2, column=0, sticky="w", padx=10, pady=(0, 5))
 
-        self.window_preview_label = ttk.Label(frame, text=i18n.get("config.window.preview.unavailable", "Preview unavailable"), font=self.FONT_NORMAL, anchor="center", compound="top")
-        self.window_preview_label.grid(row=3, column=0, sticky="nsew", padx=10, pady=(5, 5))
-        frame.rowconfigure(3, weight=1)
+        self.window_preview_label = ttk.Label(frame, text=i18n.get("config.window.preview.unavailable", "Preview unavailable"), font=self.FONT_NORMAL, anchor="center", compound="top", justify="center")
+        self.window_preview_label.grid(row=3, column=0, sticky="ew", padx=10, pady=(5, 5), ipady=18)
+        frame.rowconfigure(3, weight=0)
 
         return frame
 
@@ -258,15 +258,20 @@ class ConfigWindow(ttk.Toplevel):
 
             low_title = title.lower()
             low_class = class_name.lower()
-            match_cn = any(k in low_title for k in ["明日方舟", "方舟"])
+            match_cn = "明日方舟" in title or "方舟" in title
             match_en = any(k in low_title for k in ["arknights", "arknights.exe"])
-            match_class = any(k in low_class for k in ["unitywndclass", "unityhwndclass", "arknights"])
+            match_class = "unitywndclass" in low_class or "unityhwndclass" in low_class
+
             if title:
                 priority = 0
                 if match_cn:
+                    priority = 4
+                elif match_en:
                     priority = 3
-                elif match_en or match_class:
+                elif match_class:
                     priority = 2
+                else:
+                    priority = 1
                 candidates.append((priority, hwnd, title, class_name))
             return True
 
@@ -277,12 +282,8 @@ class ConfigWindow(ttk.Toplevel):
 
         for priority, hwnd, title, class_name in candidates:
             display = f"{title} ({class_name}) [0x{hwnd:08X}]"
-            self.window_items.append((hwnd, title))
+            self.window_items.append((hwnd, title, class_name))
             self.window_listbox.insert("end", display)
-
-        if self.window_items:
-            self.window_listbox.selection_set(0)
-            self._on_window_select(None)
 
         if self.window_items:
             self.window_scan_status.config(text=i18n.get("config.window.scan.found", "{count} windows found").format(count=len(self.window_items)))
@@ -294,16 +295,21 @@ class ConfigWindow(ttk.Toplevel):
             self.selected_window_handle = None
             self.selected_window_title = None
 
+        # After updating list and labels, adjust window size in case text wraps differently.
+        self._adjust_window_size()
+
     def _on_window_select(self, event=None):
         selections = self.window_listbox.curselection()
         if not selections:
             return
         idx = selections[0]
-        hwnd, title = self.window_items[idx]
+        hwnd, title, class_name = self.window_items[idx]
         self.selected_window_handle = int(hwnd)
         self.selected_window_title = title
+        self.selected_window_class = class_name
         self.window_selected_label.config(text=i18n.get("config.window.selected", "Selected: {title}").format(title=title))
         self._start_window_preview()
+        self._adjust_window_size()
 
     def _start_window_preview(self):
         if self.window_preview_after_id:
@@ -335,6 +341,8 @@ class ConfigWindow(ttk.Toplevel):
             logger.warning(f"窗口预览获取失败: {e}")
             self.window_preview_label.config(text=i18n.get("config.window.preview.error", "Preview error"), image="")
 
+        # 预览内容可能发生变化导致高度/宽度变化，强制重调整窗口尺寸
+        self._adjust_window_size()
         self.window_preview_after_id = self.after(1000, self._update_window_preview)
 
     def _create_mumu_frame(self, parent) -> ttk.Frame:
@@ -557,6 +565,10 @@ class ConfigWindow(ttk.Toplevel):
             if self.selected_window_title:
                 self.config_data["window_title"] = self.selected_window_title
             self.config_data["window_handle"] = self.selected_window_handle
+        if self.selected_window_title:
+            self.config_data["window_title"] = self.selected_window_title
+        if self.selected_window_class:
+            self.config_data["window_class"] = self.selected_window_class
 
         else:  # minicap
             minicap_id = self.minicap_id_entry.get().strip()

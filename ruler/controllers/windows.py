@@ -22,10 +22,12 @@ class WindowsWindowController(BaseCaptureController):
     PW_RENDERFULLCONTENT = 0x00000002
     SRCCOPY = 0x00CC0020
 
-    def __init__(self, hwnd: int):
-        if not isinstance(hwnd, int):
-            raise ValueError("window handle must be integer")
-        self.hwnd = wintypes.HWND(hwnd)
+    def __init__(self, hwnd: int = None, window_title: str = None, class_name: str = None):
+        self.hwnd = None
+        if hwnd is not None:
+            self.hwnd = wintypes.HWND(hwnd)
+        self.window_title = window_title
+        self.class_name = class_name
         self.width = 0
         self.height = 0
         self.client_left = 0
@@ -34,7 +36,53 @@ class WindowsWindowController(BaseCaptureController):
         self.hdc_mem = None
         self.bmp = None
 
+    def _find_matching_hwnd(self):
+        if not self.window_title:
+            return None
+
+        GetTopWindow = user32.GetTopWindow
+        GetWindow = user32.GetWindow
+        GetWindowTextLengthW = user32.GetWindowTextLengthW
+        GetWindowTextW = user32.GetWindowTextW
+        GetClassNameW = user32.GetClassNameW
+        IsWindowVisible = user32.IsWindowVisible
+
+        hwnd = GetTopWindow(None)
+        GW_HWNDNEXT = 2
+        while hwnd:
+            if IsWindowVisible(hwnd):
+                length = GetWindowTextLengthW(hwnd)
+                title = ""
+                if length > 0:
+                    buffer = ctypes.create_unicode_buffer(length + 1)
+                    GetWindowTextW(hwnd, buffer, length + 1)
+                    title = buffer.value.strip()
+                class_name_buffer = ctypes.create_unicode_buffer(256)
+                GetClassNameW(hwnd, class_name_buffer, 256)
+                class_name = class_name_buffer.value.strip()
+
+                if self.window_title and self.window_title in title:
+                    if self.class_name:
+                        if self.class_name.lower() in class_name.lower():
+                            return hwnd
+                    else:
+                        return hwnd
+                elif self.class_name and self.class_name.lower() in class_name.lower():
+                    return hwnd
+            hwnd = GetWindow(hwnd, GW_HWNDNEXT)
+        return None
+
     def connect(self):
+        if self.hwnd is not None:
+            if not user32.IsWindow(self.hwnd):
+                self.hwnd = None
+
+        if self.hwnd is None:
+            found = self._find_matching_hwnd()
+            if not found:
+                raise ConnectionError("未找到匹配的窗口句柄")
+            self.hwnd = wintypes.HWND(found)
+
         logger.info(f"开始连接到窗口 (hwnd=0x{self.hwnd.value:08X})")
         if not user32.IsWindow(self.hwnd):
             raise ConnectionError(f"窗口句柄无效: {self.hwnd.value}")
