@@ -258,17 +258,18 @@ class ConfigWindow(ttk.Toplevel):
 
             low_title = title.lower()
             low_class = class_name.lower()
-            match_cn = "明日方舟" in title or "方舟" in title
-            match_en = any(k in low_title for k in ["arknights", "arknights.exe"])
-            match_class = "unitywndclass" in low_class or "unityhwndclass" in low_class
-
+            
             if title:
                 priority = 0
-                if match_cn:
+                if title == "明日方舟":
+                    priority = 10
+                elif "明日方舟" in title:
+                    priority = 8
+                elif "arknights" in low_title:
+                    priority = 6
+                elif "方舟" in title:
                     priority = 4
-                elif match_en:
-                    priority = 3
-                elif match_class:
+                elif "unitywndclass" in low_class or "unityhwndclass" in low_class:
                     priority = 2
                 else:
                     priority = 1

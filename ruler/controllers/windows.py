@@ -126,32 +126,39 @@ class WindowsWindowController(BaseCaptureController):
         if not self.hdc_window or not self.hdc_mem or not self.bmp:
             raise ConnectionError("尚未初始化截图资源，请先 connect()")
 
+        # 检查窗口是否被最小化
+        if user32.IsIconic(self.hwnd):
+            # 如果最小化了，尝试恢复但不激活，截图完后再最小化（可选方案，但通常不建议自动操作用户窗口）
+            # 这里我们选择抛出更明确的错误，或者尝试一种轻量级恢复
+            logger.warning(f"窗口 0x{self.hwnd.value:08X} 处于最小化状态，截图可能失效。")
+            # 某些应用在最小化时仍能通过 PrintWindow 截图，所以我们继续尝试
+
         capture_ok = False
-        # 尝试 PrintWindow 客户区截屏（忽略标题栏）
-        flags = self.PW_CLIENTONLY | self.PW_RENDERFULLCONTENT
-        if user32.PrintWindow(self.hwnd, self.hdc_mem, flags):
-            capture_ok = True
-        else:
-            # 回退到 BitBlt 从屏幕的客户区
+        
+        # 1. 优先尝试 PrintWindow (支持后台/遮挡截图)
+        # PW_RENDERFULLCONTENT (0x02) 在 Win8.1+ 上对硬件加速窗口更有效
+        # 我们先尝试带 PW_CLIENTONLY 的，再尝试不带的
+        for flags in [self.PW_CLIENTONLY | self.PW_RENDERFULLCONTENT, self.PW_RENDERFULLCONTENT]:
+            if user32.PrintWindow(self.hwnd, self.hdc_mem, flags):
+                # 简单检查是否截到了全黑（硬件加速窗口常见问题）
+                # 这里我们无法直接检查位图内容，但 PrintWindow 返回 True 通常意味着系统尝试了渲染
+                capture_ok = True
+                break
+
+        # 2. 如果 PrintWindow 失败，尝试直接从窗口 DC BitBlt (部分非硬件加速窗口支持后台)
+        if not capture_ok:
+            if gdi32.BitBlt(self.hdc_mem, 0, 0, self.width, self.height, self.hdc_window, 0, 0, self.SRCCOPY):
+                capture_ok = True
+
+        # 3. 最后回退到 BitBlt 从屏幕 DC (会被遮挡)
+        if not capture_ok:
             screen_dc = user32.GetDC(None)
-            mem_dc = gdi32.CreateCompatibleDC(screen_dc)
-            temp_bmp = gdi32.CreateCompatibleBitmap(screen_dc, self.width, self.height)
-            gdi32.SelectObject(mem_dc, temp_bmp)
-            if gdi32.BitBlt(mem_dc, 0, 0, self.width, self.height, screen_dc, self.client_left, self.client_top, self.SRCCOPY):
-                gdi32.SelectObject(self.hdc_mem, self.bmp)
-                if gdi32.BitBlt(self.hdc_mem, 0, 0, self.width, self.height, mem_dc, 0, 0, self.SRCCOPY):
-                    capture_ok = True
-            gdi32.DeleteObject(temp_bmp)
-            gdi32.DeleteDC(mem_dc)
+            if gdi32.BitBlt(self.hdc_mem, 0, 0, self.width, self.height, screen_dc, self.client_left, self.client_top, self.SRCCOPY):
+                capture_ok = True
             user32.ReleaseDC(None, screen_dc)
 
         if not capture_ok:
-            # 最后回退 PrintWindow 全窗口
-            if user32.PrintWindow(self.hwnd, self.hdc_mem, self.PW_RENDERFULLCONTENT):
-                capture_ok = True
-
-        if not capture_ok:
-            raise RuntimeError("窗口截图失败 (PrintWindow/BitBlt 回退失败)")
+            raise RuntimeError("窗口截图所有方案均失败")
 
         class BITMAPINFOHEADER(ctypes.Structure):
             _fields_ = [
