@@ -6,74 +6,52 @@ set ROOT=%~dp0
 set ROOT=%ROOT:~0,-1%
 cd /d "%ROOT%"
 
-:: Try to find conda and use base environment
-set "PY_EXE=python"
-where conda >nul 2>nul
-if !ERRORLEVEL! equ 0 (
-    echo [INFO] Detected conda, attempting to use base environment...
-    :: We use 'conda run' to ensure we use the correct environment's python
-    set "PY_EXE=conda run -n base --no-capture-output python"
-) else (
-    echo [INFO] Conda not found, using system python.
-)
-
-echo [INFO] Using Python: !PY_EXE!
+set VENV_DIR=.venv_build
 
 if exist "dist" rd /s /q "dist"
 if exist "build" rd /s /q "build"
+if exist "%VENV_DIR%" rd /s /q "%VENV_DIR%"
 
-echo [INFO] Installing dependencies...
-call !PY_EXE! -m pip install -r "requirements.txt"
-if !ERRORLEVEL! neq 0 (
-    echo [ERROR] Failed to install dependencies.
-    pause
-    exit /b !ERRORLEVEL!
-)
+python -m venv "%VENV_DIR%"
+if !ERRORLEVEL! neq 0 exit /b !ERRORLEVEL!
 
-call !PY_EXE! -m pip install pyinstaller
-if !ERRORLEVEL! neq 0 (
-    echo [ERROR] Failed to install PyInstaller.
-    pause
-    exit /b !ERRORLEVEL!
-)
+set "PY_EXE=%VENV_DIR%\Scripts\python.exe"
+set "PIP_EXE=%VENV_DIR%\Scripts\pip.exe"
 
-echo ===================================================
-echo Building ArknightsCostBarRuler
-echo ===================================================
-:: Destination is set to 'ruler/locales' to match the relative path from the script's entry point.
-call !PY_EXE! -m PyInstaller --clean --noconfirm --onedir --windowed ^
+call "!PIP_EXE!" install -r "requirements.txt"
+call "!PIP_EXE!" install pyinstaller
+
+call "!PY_EXE!" -m PyInstaller --clean --noconfirm --onedir --windowed --uac-admin ^
     --name ArknightsCostBarRuler ^
     --distpath "dist" ^
     --workpath "build\ArknightsCostBarRuler" ^
+    --paths "." ^
     --add-data "ruler\locales;ruler\locales" ^
+    --add-data "ruler\controllers\minicap;ruler\controllers\minicap" ^
     --add-data "icons;icons" ^
+    --hidden-import "controllers.windows" ^
+    --hidden-import "controllers.mumu" ^
+    --hidden-import "controllers.ldplayer" ^
+    --hidden-import "controllers.minicap" ^
+    --exclude-module "numpy" --exclude-module "matplotlib" --exclude-module "scipy" ^
+    --exclude-module "pandas" --exclude-module "torch" --exclude-module "tensorflow" ^
     "ruler\main.py"
 
-if !ERRORLEVEL! neq 0 (
-    echo [ERROR] Failed to build ArknightsCostBarRuler.
-    pause
-    exit /b !ERRORLEVEL!
-)
-
-echo ===================================================
-echo Building ArknightsTimelineTool
-echo ===================================================
-call !PY_EXE! -m PyInstaller --clean --noconfirm --onedir --windowed ^
+call "!PY_EXE!" -m PyInstaller --clean --noconfirm --onedir --windowed --uac-admin ^
     --name ArknightsTimelineTool ^
     --distpath "dist" ^
     --workpath "build\ArknightsTimelineTool" ^
+    --paths "." ^
     --add-data "timeline_tool\locales;timeline_tool\locales" ^
     --add-data "icons;icons" ^
+    --hidden-import "utils" ^
+    --exclude-module "numpy" --exclude-module "matplotlib" --exclude-module "scipy" ^
+    --exclude-module "pandas" --exclude-module "torch" --exclude-module "tensorflow" ^
     "timeline_tool\main.py"
 
-if !ERRORLEVEL! neq 0 (
-    echo [ERROR] Failed to build ArknightsTimelineTool.
-    pause
-    exit /b !ERRORLEVEL!
-)
+if exist "%VENV_DIR%" rd /s /q "%VENV_DIR%"
+if exist "build" rd /s /q "build"
 
-echo.
-echo Build complete.
+echo Build Complete.
 dir "%ROOT%\dist"
-echo.
 pause

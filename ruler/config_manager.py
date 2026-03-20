@@ -13,6 +13,11 @@ from typing import Dict, Any, Optional
 
 from i18n import i18n
 
+try:
+    from controllers.windows import WindowsWindowController
+except ImportError:
+    WindowsWindowController = None
+
 logger = logging.getLogger(__name__)
 
 CONFIG_FILE = "../config.json"
@@ -328,19 +333,31 @@ class ConfigWindow(ttk.Toplevel):
             self.window_preview_label.config(text=i18n.get("config.window.preview.unavailable", "Preview unavailable"), image="")
             return
 
+        if WindowsWindowController is None:
+            self.window_preview_label.config(text="Error: Controller not found", image="")
+            return
+
         try:
-            from controllers.windows import WindowsWindowController
-            with WindowsWindowController(self.selected_window_handle).connect() as window_controller:
+            # 强制不使用缓存，每次都重新创建控制器并连接
+            with WindowsWindowController(self.selected_window_handle) as window_controller:
                 img = window_controller.capture_frame()
 
-            display_img = img.copy()
-            display_img.thumbnail((500, 240))
-            self._window_preview_photo = ImageTk.PhotoImage(display_img)
-            self.window_preview_label.config(image=self._window_preview_photo, text="")
+            if img:
+                # 显式转换并确保图像数据是新鲜的
+                img = img.convert("RGB") 
+                display_img = img.copy()
+                display_img.thumbnail((500, 240))
+                # 显式更新 PhotoImage 对象以强制 Tkinter 刷新
+                self._window_preview_photo = ImageTk.PhotoImage(display_img)
+                self.window_preview_label.config(image=self._window_preview_photo, text="")
+            else:
+                raise ValueError("Captured image is empty")
 
         except Exception as e:
             logger.warning(f"窗口预览获取失败: {e}")
+            # 失败时清空旧预览图，避免误导用户
             self.window_preview_label.config(text=i18n.get("config.window.preview.error", "Preview error"), image="")
+            self._window_preview_photo = None
 
         # 预览内容可能发生变化导致高度/宽度变化，强制重调整窗口尺寸
         self._adjust_window_size()
